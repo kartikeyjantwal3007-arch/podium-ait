@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #080B14;
+  --foreground: #F8FAFC;
+  --sidebar-bg: #0D1220;
+  --card-bg: #121A2B;
+  --card-border: #1E293B;
+  --primary-purple: #8B5CF6;
+  --accent-blue: #38BDF8;
+  --text-muted: #94A3B8;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #EF4444;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background: rgba(18, 26, 43, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-nav {
+  background: rgba(13, 18, 32, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Glow effects */
+.glow-purple {
+  box-shadow: 0 0 25px -5px rgba(139, 92, 246, 0.35);
+}
+
+.glow-blue {
+  box-shadow: 0 0 25px -5px rgba(56, 189, 248, 0.35);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #080B14;
+}
+::-webkit-scrollbar-thumb {
+  background: #1E293B;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Print Certificate Specific Rules */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-certificate-container {
+    box-shadow: none !important;
+    border: 8px double #1e293b !important;
+    margin: 0 !important;
+    padding: 30px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    page-break-inside: avoid;
+  }
+}
