@@ -52,7 +52,12 @@ export default function OrganiserPortalPage() {
   const [awardTitle, setAwardTitle] = useState('1st Place Champions');
   const [rankPosition, setRankPosition] = useState<1 | 2 | 3>(1);
 
-  const isAuthorized = currentUser.role === 'COMPETITION_ORGANISER' || currentUser.role === 'ADMINISTRATOR';
+  const isAuthorized =
+    currentUser.role === 'COMPETITION_ORGANISER' ||
+    currentUser.role === 'CLUB_SECRETARY' ||
+    currentUser.role === 'ADMINISTRATOR' ||
+    currentUser.role === 'GENERAL_SECRETARY' ||
+    currentUser.role === 'DIRECTOR';
 
   const handleCreateCompSubmit = (e: React.FormEvent) => {
     e.preventDefault();

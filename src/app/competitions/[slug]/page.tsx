@@ -2,8 +2,7 @@
 
 import React, { useState, use } from 'react';
 import Link from 'next/link';
-import Navbar from '@/components/Navbar';
-import Sidebar from '@/components/Sidebar';
+import DashboardShell from '@/components/DashboardShell';
 import CertificateModal from '@/components/CertificateModal';
 import { useAppStore } from '@/lib/store';
 import { Certificate } from '@/lib/types';
@@ -33,18 +32,15 @@ function CompetitionDetailContent({ params }: { params: Promise<{ slug: string }
 
   if (!competition) {
     return (
-      <div className="min-h-screen flex flex-col bg-[#080B14]">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center p-8 text-center space-y-4">
-          <div>
-            <h1 className="text-xl font-bold text-white">Competition Not Found</h1>
-            <p className="text-xs text-slate-400 mt-1">The requested competition does not exist or has been archived.</p>
-            <Link href="/competitions" className="mt-4 inline-block px-4 py-2 bg-purple-600 rounded-lg text-xs font-semibold text-white">
-              Back to Competitions
-            </Link>
-          </div>
+      <DashboardShell>
+        <div className="p-8 text-center space-y-4">
+          <h1 className="text-xl font-bold text-white">Competition Not Found</h1>
+          <p className="text-xs text-slate-400 mt-1">The requested competition does not exist or has been archived.</p>
+          <Link href="/competitions" className="mt-4 inline-block px-4 py-2 bg-purple-600 rounded-lg text-xs font-semibold text-white">
+            Back to Competitions
+          </Link>
         </div>
-      </div>
+      </DashboardShell>
     );
   }
 
@@ -54,13 +50,8 @@ function CompetitionDetailContent({ params }: { params: Promise<{ slug: string }
   const compCertificates = certificates.filter(c => c.competitionId === competition.id);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#080B14]">
-      <Navbar />
-
-      <div className="flex-1 flex">
-        <Sidebar />
-
-        <main className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-8 overflow-y-auto">
+    <DashboardShell>
+      <div className="space-y-8">
           
           {/* Back button */}
           <Link

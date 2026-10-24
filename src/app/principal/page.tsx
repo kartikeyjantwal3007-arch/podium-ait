@@ -42,8 +42,8 @@ export default function PrincipalPortalPage() {
   const [rejectingCertId, setRejectingCertId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
-  // Principal authorization check
-  const isAuthorized = currentUser.role === 'PRINCIPAL';
+  // Principal & Director authorization check
+  const isAuthorized = currentUser.role === 'PRINCIPAL' || currentUser.role === 'DIRECTOR';
 
   // Certificate queues
   const pendingQueue = certificates.filter(c => c.status === 'UNDER_REVIEW' || c.status === 'SUBMITTED');

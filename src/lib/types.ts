@@ -1,4 +1,13 @@
-export type UserRole = 'STUDENT' | 'COMPETITION_ORGANISER' | 'ADMINISTRATOR' | 'PRINCIPAL';
+export type UserRole = 
+  | 'STUDENT' 
+  | 'JOINT_SECRETARY' 
+  | 'CLUB_SECRETARY' 
+  | 'GENERAL_SECRETARY' 
+  | 'DIRECTOR'
+  // Legacy aliases for backward compatibility:
+  | 'COMPETITION_ORGANISER' 
+  | 'ADMINISTRATOR' 
+  | 'PRINCIPAL';
 
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
 
@@ -15,12 +24,15 @@ export type CompetitionCategory =
 
 export type CertificateStatus = 
   | 'DRAFT' 
-  | 'SUBMITTED' 
-  | 'UNDER_REVIEW' 
+  | 'PENDING_REVIEW'
+  | 'SUBMITTED' // legacy alias
+  | 'UNDER_REVIEW' // legacy alias
   | 'APPROVED' 
+  | 'PENDING_SIGNATURE'
   | 'SIGNED' 
   | 'ISSUED' 
   | 'REJECTED' 
+  | 'RETURNED_FOR_CORRECTION'
   | 'REVOKED' 
   | 'SUPERSEDED';
 
@@ -37,6 +49,9 @@ export type NotificationType =
   | 'RESULT' 
   | 'CERTIFICATE' 
   | 'BADGE' 
+  | 'NOTICE'
+  | 'PRIORITY_NOTICE'
+  | 'APPOINTMENT'
   | 'SYSTEM';
 
 export interface Profile {
@@ -47,12 +62,67 @@ export interface Profile {
   collegeEmail: string;
   branch: string;
   graduationYear: number;
+  yearOfStudy?: number; // 1, 2, 3, 4
   role: UserRole;
+  assignedClubId?: string;
+  assignedClubName?: string;
   verificationStatus: VerificationStatus;
   avatarUrl?: string;
   bio?: string;
   githubProfile?: string;
   linkedinProfile?: string;
+  passwordHash?: string;
+  createdAt: string;
+}
+
+export interface Club {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  category: string;
+  logoUrl?: string;
+  clubSecretaryId?: string;
+  clubSecretaryName?: string;
+  jointSecretaryIds?: string[];
+  totalHackathons: number;
+  createdAt: string;
+}
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  category: 'GENERAL' | 'HACKATHON' | 'CLUB' | 'RESULTS' | 'URGENT' | 'SCHEDULE';
+  priority: 'NORMAL' | 'HIGH' | 'URGENT';
+  isPriorityNotice: boolean;
+  authorId: string;
+  authorName: string;
+  authorDesignation: UserRole;
+  clubId?: string;
+  clubName?: string;
+  publishedAt: string;
+  expiryDate?: string;
+  attachmentName?: string;
+  status: 'PUBLISHED' | 'DRAFT' | 'WITHDRAWN';
+  readCount: number;
+}
+
+export interface Appointment {
+  id: string;
+  targetStudentId: string;
+  targetStudentName: string;
+  targetStudentRollNo: string;
+  targetStudentEmail: string;
+  role: 'JOINT_SECRETARY' | 'CLUB_SECRETARY';
+  clubId: string;
+  clubName: string;
+  appointedById: string;
+  appointedByName: string;
+  appointedByRole: UserRole;
+  startDate: string;
+  endDate?: string;
+  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED';
   createdAt: string;
 }
 
@@ -67,6 +137,8 @@ export interface Competition {
   endDate: string;
   venueType: 'ON_CAMPUS' | 'VIRTUAL' | 'HYBRID';
   venueDetails: string;
+  clubId?: string;
+  clubName?: string;
   createdBy: string;
   rules?: string;
   eligibility?: string;
@@ -74,6 +146,12 @@ export interface Competition {
   prizePool: string;
   maxTeamSize: number;
   minTeamSize: number;
+  organisingCommittee?: {
+    name: string;
+    rollNo: string;
+    role: string;
+    avatarUrl?: string;
+  }[];
   createdAt: string;
 }
 
@@ -83,6 +161,7 @@ export interface Team {
   slug: string;
   logoUrl?: string;
   description: string;
+  competitionId?: string;
   createdBy: string;
   createdAt: string;
   members: TeamMember[];
@@ -129,6 +208,8 @@ export interface CompetitionResult {
   id: string;
   competitionId: string;
   competitionTitle: string;
+  clubId?: string;
+  clubName?: string;
   teamId: string;
   teamName: string;
   projectId?: string;
@@ -138,6 +219,8 @@ export interface CompetitionResult {
   isVerified: boolean;
   verifiedBy?: string;
   verifiedAt?: string;
+  submittedBy?: string;
+  submittedAt?: string;
   members: {
     studentId: string;
     name: string;
@@ -163,11 +246,14 @@ export interface Certificate {
   certificateNumber: string; // e.g. "AIT-CERT-2026-00101"
   studentId: string;
   recipientName: string;
+  recipientRollNo?: string;
   competitionId: string;
   competitionTitle: string;
+  clubName?: string;
   resultId?: string;
   title: string; // "Certificate of Merit", "Certificate of Outstanding Achievement"
   awardText: string;
+  category?: 'FIRST_PLACE' | 'SECOND_PLACE' | 'THIRD_PLACE' | 'PARTICIPATION' | 'ORGANISER' | 'SPECIAL_AWARD';
   issueDate: string;
   issuingAuthority: string;
   signerName: string;
@@ -177,8 +263,8 @@ export interface Certificate {
   signatureMode: SignatureMode;
   signatureHash?: string;
   signedAt?: string;
-  createdAt: string;
   rejectionReason?: string;
+  createdAt: string;
 }
 
 export interface Notification {

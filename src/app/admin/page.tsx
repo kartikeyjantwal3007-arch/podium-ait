@@ -31,7 +31,10 @@ export default function AdminPortalPage() {
 
   const [activeTab, setActiveTab] = useState<'VERIFICATIONS' | 'ROLES' | 'AUDIT'>('VERIFICATIONS');
 
-  const isAuthorized = currentUser.role === 'ADMINISTRATOR';
+  const isAuthorized =
+    currentUser.role === 'ADMINISTRATOR' ||
+    currentUser.role === 'GENERAL_SECRETARY' ||
+    currentUser.role === 'DIRECTOR';
 
   const pendingStudents = allProfiles.filter(p => p.role === 'STUDENT' && p.verificationStatus === 'PENDING');
   const verifiedStudents = allProfiles.filter(p => p.verificationStatus === 'VERIFIED');
