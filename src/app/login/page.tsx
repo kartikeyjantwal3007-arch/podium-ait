@@ -72,21 +72,11 @@ const DESIGNATIONS: DesignationOption[] = [
     role: 'GENERAL_SECRETARY',
     title: 'General Secretary',
     subtitle: '4th Year Apex',
-    description: 'Supervise all technical clubs, appoint Club Secretaries, verify podium results, and broadcast priority notices.',
+    description: 'Institution-wide supervisory authority: oversee all clubs, appoint Club Secretaries, verify podium results, approve and cryptographically sign certificates, and publish priority notices.',
     icon: Shield,
     accentColor: 'border-rose-500/60 text-rose-400 bg-rose-500/10',
     badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
     targetDashboard: '/general-secretary',
-  },
-  {
-    role: 'DIRECTOR',
-    title: 'Director',
-    subtitle: 'Principal Office',
-    description: 'Supreme institutional authority, comprehensive podium overview, and official cryptographic digital certificate signing.',
-    icon: Award,
-    accentColor: 'border-amber-500/60 text-amber-400 bg-amber-500/10',
-    badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    targetDashboard: '/director',
   },
 ];
 
@@ -197,9 +187,8 @@ export default function LoginPage() {
     const target = allProfiles.find((p) => p.id === profileId);
     if (!target) return;
     switchUser(profileId);
-    if (target.role === 'DIRECTOR' || target.role === 'PRINCIPAL') router.push('/director');
-    else if (target.role === 'GENERAL_SECRETARY' || target.role === 'ADMINISTRATOR') router.push('/general-secretary');
-    else if (target.role === 'CLUB_SECRETARY' || target.role === 'COMPETITION_ORGANISER') router.push('/club-secretary');
+    if (target.role === 'GENERAL_SECRETARY') router.push('/general-secretary');
+    else if (target.role === 'CLUB_SECRETARY') router.push('/club-secretary');
     else router.push('/dashboard');
   };
 
@@ -284,7 +273,7 @@ export default function LoginPage() {
                   </span>
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {DESIGNATIONS.map((desig) => {
                     const isSelected = selectedDesignation === desig.role;
                     const Icon = desig.icon;
@@ -391,7 +380,7 @@ export default function LoginPage() {
                       type="text"
                       value={rollNo}
                       onChange={(e) => setRollNo(e.target.value)}
-                      placeholder="e.g. 22042 (or DIR001 for Director)"
+                      placeholder="e.g. 22042 (or 21008 for Gen-Sec)"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#111728] border border-[#1e293b] text-white placeholder-slate-500 text-xs focus:outline-none focus:border-purple-500 uppercase font-mono transition-colors"
                     />
                   </div>
@@ -479,16 +468,19 @@ export default function LoginPage() {
                       onClick={() => handleQuickPersonaSelect('user-gen-sec-1')}
                       className="p-2 rounded-lg bg-[#111728] border border-[#1e293b] hover:border-rose-500 text-left text-slate-300 transition-colors"
                     >
-                      <p className="font-bold text-rose-400 truncate">Aditya Vardhan</p>
+                      <p className="font-bold text-rose-400 truncate">Nishant Singh</p>
                       <p className="text-[9px] text-slate-500">General Secretary</p>
                     </button>
 
                     <button
-                      onClick={() => handleQuickPersonaSelect('user-director-1')}
+                      onClick={() => handleQuickPersonaSelect('user-student-2')}
                       className="col-span-2 p-2 rounded-lg bg-[#111728] border border-[#1e293b] hover:border-amber-500 text-left text-slate-300 transition-colors"
                     >
-                      <p className="font-bold text-amber-400 truncate">Brig. (Dr.) S. K. Joshi</p>
-                      <p className="text-[9px] text-slate-500">Director & Principal (Certificates & Signing)</p>
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-amber-400 truncate">Priya Deshmukh</p>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">TEST PENDING VERIFICATION</span>
+                      </div>
+                      <p className="text-[9px] text-slate-500">Student (Roll: 22088) — Awaiting AIT Roster Verification</p>
                     </button>
                   </div>
                 </div>
@@ -504,7 +496,7 @@ export default function LoginPage() {
               <div className="flex items-center gap-2 mb-4 p-3 rounded-xl bg-purple-950/20 border border-purple-500/20 text-xs text-purple-300">
                 <Info className="w-4 h-4 text-purple-400 shrink-0" />
                 <span>
-                  New accounts are provisioned with the <strong>Student</strong> role by default. Leadership roles (Joint Secretary, Club Secretary, General Secretary, Director) require official institutional appointments.
+                  New accounts are strictly provisioned with the <strong>Student</strong> role with <strong>Pending AIT Verification</strong> status. Leadership roles (Joint Secretary, Club Secretary, General Secretary) require official institutional appointments.
                 </span>
               </div>
 

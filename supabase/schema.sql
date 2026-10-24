@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS profiles (
     college_email TEXT UNIQUE NOT NULL,
     branch TEXT, -- e.g. "Computer Engineering", "IT", "ENTC", "Mechanical"
     graduation_year INTEGER,
-    role TEXT NOT NULL DEFAULT 'STUDENT' CHECK (role IN ('STUDENT', 'COMPETITION_ORGANISER', 'ADMINISTRATOR', 'PRINCIPAL')),
-    verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('PENDING', 'VERIFIED', 'REJECTED')),
+    role TEXT NOT NULL DEFAULT 'STUDENT' CHECK (role IN ('STUDENT', 'JOINT_SECRETARY', 'CLUB_SECRETARY', 'GENERAL_SECRETARY')),
+    verification_status TEXT NOT NULL DEFAULT 'PENDING_AIT_VERIFICATION' CHECK (verification_status IN ('PENDING_AIT_VERIFICATION', 'VERIFIED', 'REJECTED')),
     avatar_url TEXT,
     bio TEXT,
     github_profile TEXT,
@@ -187,9 +187,9 @@ CREATE TABLE IF NOT EXISTS certificates (
     award_text TEXT NOT NULL,
     issue_date DATE NOT NULL,
     issuing_authority TEXT NOT NULL DEFAULT 'Army Institute of Technology, Pune',
-    signer_name TEXT DEFAULT 'Brig. (Dr.) Principal',
-    signer_title TEXT DEFAULT 'Principal & Director',
-    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'SIGNED', 'ISSUED', 'REJECTED', 'REVOKED', 'SUPERSEDED')),
+    signer_name TEXT DEFAULT 'Aditya Vardhan',
+    signer_title TEXT DEFAULT 'General Secretary, Technical Affairs, AIT Pune',
+    status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT', 'PENDING_REVIEW', 'APPROVED', 'PENDING_SIGNATURE', 'SIGNED', 'ISSUED', 'REJECTED', 'RETURNED_FOR_CORRECTION', 'REVOKED', 'SUPERSEDED')),
     verification_token TEXT UNIQUE NOT NULL, -- Cryptographically non-guessable token for public verification
     signature_mode TEXT DEFAULT 'PENDING' CHECK (signature_mode IN ('PENDING', 'MODE_A_IMAGE_SEAL', 'MODE_B_CRYPTOGRAPHIC_PDF')),
     signature_hash TEXT, -- Cryptographic hash or signature seal timestamp
@@ -264,14 +264,149 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 20. ACADEMIC YEAR CORRECTIONS (Immutable audit trail for student academic records)
+CREATE TABLE IF NOT EXISTS academic_year_corrections (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    student_name TEXT NOT NULL,
+    student_roll_no TEXT NOT NULL,
+    previous_graduation_year INTEGER NOT NULL,
+    new_graduation_year INTEGER NOT NULL,
+    previous_year_of_study INTEGER NOT NULL,
+    new_year_of_study INTEGER NOT NULL,
+    corrected_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    corrected_by_name TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 21. HACKATHON APPLICATIONS (Dynamic form submissions)
+CREATE TABLE IF NOT EXISTS hackathon_applications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    competition_id UUID NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+    club_id UUID,
+    applicant_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    applicant_name TEXT NOT NULL,
+    applicant_roll_no TEXT NOT NULL,
+    applicant_reg_no TEXT NOT NULL,
+    applicant_email TEXT NOT NULL,
+    applicant_branch TEXT NOT NULL,
+    applicant_year INTEGER NOT NULL,
+    is_team_application BOOLEAN DEFAULT FALSE,
+    team_name TEXT,
+    team_id UUID REFERENCES teams(id) ON DELETE SET NULL,
+    team_members JSONB DEFAULT '[]',
+    project_title TEXT,
+    project_description TEXT,
+    technologies TEXT,
+    experience TEXT,
+    github_link TEXT,
+    custom_answers JSONB DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'REJECTED', 'WAITLISTED', 'WITHDRAWN')),
+    total_score NUMERIC(5,2),
+    submitted_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 22. JUDGING SCORES (Rubric scores recorded by authorized judges)
+CREATE TABLE IF NOT EXISTS judging_scores (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    application_id UUID REFERENCES hackathon_applications(id) ON DELETE CASCADE,
+    competition_id UUID NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+    team_id TEXT NOT NULL,
+    team_name TEXT NOT NULL,
+    judge_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    judge_name TEXT NOT NULL,
+    technical_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+    innovation_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+    design_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+    presentation_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+    total_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+    comments TEXT,
+    notes TEXT,
+    evaluated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 23. RESULT CORRECTION LOGS (Immutable audit trail for result modifications)
+CREATE TABLE IF NOT EXISTS result_correction_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    result_id UUID REFERENCES competition_results(id) ON DELETE CASCADE,
+    competition_id UUID NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+    competition_title TEXT NOT NULL,
+    original_award TEXT NOT NULL,
+    new_award TEXT NOT NULL,
+    original_team_name TEXT NOT NULL,
+    new_team_name TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    responsible_user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    responsible_user_name TEXT NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Row Level Security (RLS) Policies
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE competitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE hackathon_applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE judging_scores ENABLE ROW LEVEL SECURITY;
+ALTER TABLE academic_year_corrections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE result_correction_logs ENABLE ROW LEVEL SECURITY;
 
--- Sample RLS policies:
--- Public can view published competitions
+-- 1. Profiles: Students can read public profiles; only General Secretary can update verification status
+CREATE POLICY "Public read profiles" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users update own profile bio" ON profiles FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (role = (SELECT role FROM profiles WHERE user_id = auth.uid()));
+CREATE POLICY "General Secretary manage student verifications" ON profiles FOR ALL USING (EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'GENERAL_SECRETARY'));
+
+-- 2. Competitions: Public view published; Club Secretaries & Gen Sec manage
 CREATE POLICY "Public view published competitions" ON competitions FOR SELECT USING (status != 'DRAFT');
--- Students can view their own certificates or anyone can view verified issued certificates via token
-CREATE POLICY "Public verify issued certificates" ON certificates FOR SELECT USING (status = 'ISSUED');
+CREATE POLICY "Club Secretaries manage own club competitions" ON competitions FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role IN ('CLUB_SECRETARY', 'GENERAL_SECRETARY'))
+);
+
+-- 3. Applications: Students view and submit their own; Club Secretary views for their club; GS views all
+CREATE POLICY "Students view own applications" ON hackathon_applications FOR SELECT USING (
+    applicant_id = (SELECT id FROM profiles WHERE user_id = auth.uid())
+);
+CREATE POLICY "Club Secretaries manage applications" ON hackathon_applications FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role IN ('CLUB_SECRETARY', 'GENERAL_SECRETARY'))
+);
+
+-- 4. Judging Scores: Judges and Secretaries manage scores; applicants cannot alter scores
+CREATE POLICY "Secretaries view and manage judging scores" ON judging_scores FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role IN ('CLUB_SECRETARY', 'GENERAL_SECRETARY'))
+);
+
+-- 5. Audit Trails: Append-only / read by authorized administrators
+CREATE POLICY "Admin view year corrections" ON academic_year_corrections FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'GENERAL_SECRETARY')
+);
+CREATE POLICY "Admin view result corrections" ON result_correction_logs FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role IN ('CLUB_SECRETARY', 'GENERAL_SECRETARY'))
+);
+
+-- 6. Certificates: Students view their own or issued; Gen Sec reviews & signs
+CREATE POLICY "Students view own certificates" ON certificates FOR SELECT USING (
+    status = 'ISSUED' OR student_id = (SELECT id FROM profiles WHERE user_id = auth.uid())
+);
+CREATE POLICY "General Secretary manage certificates" ON certificates FOR ALL USING (
+    EXISTS (SELECT 1 FROM profiles WHERE user_id = auth.uid() AND role = 'GENERAL_SECRETARY')
+);
+
+-- 24. NOTICE REACTIONS (WhatsApp-style emoji reactions with 1 active reaction per user per notice)
+CREATE TABLE IF NOT EXISTS notice_reactions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    notice_id UUID NOT NULL REFERENCES notices(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    reaction TEXT NOT NULL CHECK (reaction IN ('LIKE', 'LOVE', 'LAUGH', 'WOW', 'THANKS', 'CELEBRATE')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_user_notice_reaction UNIQUE(notice_id, user_id)
+);
+
+ALTER TABLE notice_reactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read notice reactions" ON notice_reactions FOR SELECT USING (true);
+CREATE POLICY "Users manage own notice reaction" ON notice_reactions FOR ALL USING (
+    user_id = (SELECT id FROM profiles WHERE user_id = auth.uid())
+);
+

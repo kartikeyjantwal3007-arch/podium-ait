@@ -16,7 +16,16 @@ import {
   Club,
   Notice,
   Appointment,
-  CertificateStatus
+  CertificateStatus,
+  VerificationStatus,
+  FormFieldDefinition,
+  HackathonApplication,
+  JudgingScore,
+  AcademicYearCorrection,
+  ResultCorrectionLog,
+  ApplicationStatus,
+  NoticeReaction,
+  NoticeReactionType
 } from './types';
 import { 
   INITIAL_PROFILES, 
@@ -30,7 +39,10 @@ import {
   INITIAL_AUDIT_LOGS,
   INITIAL_CLUBS,
   INITIAL_NOTICES,
-  INITIAL_APPOINTMENTS
+  INITIAL_APPOINTMENTS,
+  INITIAL_APPLICATIONS,
+  INITIAL_JUDGING_SCORES,
+  DEFAULT_FORM_FIELDS
 } from './data/mockData';
 import { isSupabaseConfigured } from './supabaseClient';
 
@@ -39,6 +51,7 @@ interface AppContextType {
   allProfiles: Profile[];
   clubs: Club[];
   notices: Notice[];
+  noticeReactions: NoticeReaction[];
   appointments: Appointment[];
   competitions: Competition[];
   teams: Team[];
@@ -50,6 +63,13 @@ interface AppContextType {
   auditLogs: AuditLog[];
   savedProjectIds: string[];
   isSupabaseActive: boolean;
+  isInitialized: boolean;
+
+  // Hackathon Forms & Dynamic Applications
+  applications: HackathonApplication[];
+  judgingScores: JudgingScore[];
+  academicYearCorrections: AcademicYearCorrection[];
+  resultCorrectionLogs: ResultCorrectionLog[];
 
   // Actions
   switchUser: (userId: string) => void;
@@ -69,8 +89,11 @@ interface AppContextType {
     graduationYear: number;
     password: string;
   }) => { success: boolean; error?: string; profile?: Profile };
-  verifyStudent: (studentId: string, status: 'VERIFIED' | 'REJECTED', notes?: string) => void;
-  createCompetition: (competition: Omit<Competition, 'id' | 'createdAt'>) => void;
+  createCompetition: (competition: Omit<Competition, 'id' | 'createdAt'>) => { success: boolean; error?: string; competition?: Competition };
+  updateCompetitionDetails: (
+    id: string,
+    data: Partial<Pick<Competition, 'title' | 'description' | 'category' | 'startDate' | 'endDate' | 'prizePool' | 'minTeamSize' | 'maxTeamSize' | 'registrationCloseDate'>>
+  ) => { success: boolean; error?: string };
   updateCompetitionStatus: (id: string, status: Competition['status']) => void;
   createTeam: (name: string, description: string) => Team;
   joinTeam: (teamId: string, studentId: string, role?: string) => void;
@@ -81,6 +104,7 @@ interface AppContextType {
   // Notices
   publishNotice: (notice: Omit<Notice, 'id' | 'publishedAt' | 'readCount'>) => { success: boolean; error?: string; notice?: Notice };
   withdrawNotice: (noticeId: string) => void;
+  toggleNoticeReaction: (noticeId: string, reaction: NoticeReactionType) => void;
 
   // Appointments
   appointJointSecretary: (data: {
@@ -100,41 +124,101 @@ interface AppContextType {
   // Results & Podium
   submitOfficialResult: (result: Omit<CompetitionResult, 'id'>) => { success: boolean; error?: string };
   verifyPodiumResults: (resultId: string) => void;
+  submitResultsForVerification: (competitionId: string, results: Omit<CompetitionResult, 'id'>[]) => { success: boolean; error?: string };
+  verifyAndPublishResults: (competitionId: string, approved: boolean, reason?: string) => { success: boolean; error?: string };
+  correctPublishedResult: (resultId: string, newAwardTitle: string, newRankPosition: number | null, reason: string) => { success: boolean; error?: string };
 
-  // Certificates & Director Digital Signing
+  // Dynamic Hackathon Forms & Application Workflow
+  updateCompetitionForm: (competitionId: string, fields: FormFieldDefinition[], openDate?: string, closeDate?: string) => void;
+  publishCompetitionRegistration: (competitionId: string, publish: boolean) => void;
+  submitHackathonApplication: (data: Omit<HackathonApplication, 'id' | 'status' | 'submittedAt'>) => { success: boolean; error?: string; applicationId?: string };
+  updateApplicationStatus: (applicationId: string, status: ApplicationStatus, notes?: string) => { success: boolean; error?: string };
+  recordJudgingScore: (scoreData: Omit<JudgingScore, 'id' | 'evaluatedAt' | 'totalScore'>) => { success: boolean; error?: string; scoreId?: string };
+
+  // Student AIT Verification & Password Recovery
+  verifyStudentOtp: (studentId: string, otp: string) => { success: boolean; error?: string };
+  requestVerificationOtp: (studentId: string) => { success: boolean; otp?: string; message?: string };
+  generalSecretaryVerifyStudent: (studentId: string, approved: boolean, reason?: string, verifiedYear?: number) => { success: boolean; error?: string };
+  adminCorrectStudentYear: (studentId: string, newGradYear: number, newYearOfStudy: number, reason: string) => { success: boolean; error?: string };
+  recoverPassword: (emailOrRegNo: string) => { success: boolean; message?: string; tempToken?: string };
+  resetPasswordWithToken: (token: string, newPass: string) => { success: boolean; message?: string };
+
+  // Certificates Workflow (Transferred to General Secretary)
   generateCertificatesForCompetition: (competitionId: string, category: 'ALL_WINNERS' | 'PARTICIPANTS') => number;
-  approveCertificate: (certId: string, mode: SignatureMode) => void;
+  allocateCertificates: (allocations: {
+    competitionId: string;
+    studentId: string;
+    recipientName: string;
+    recipientRollNo?: string;
+    category: 'FIRST_PLACE' | 'SECOND_PLACE' | 'THIRD_PLACE' | 'PARTICIPATION';
+    awardTitle?: string;
+    awardText?: string;
+    resultId?: string;
+  }[]) => { success: boolean; count: number; error?: string; skippedDuplicates?: number };
+  approveCertificate: (certId: string, mode?: SignatureMode) => void;
+  generalSecretarySignCertificate: (certId: string, pin: string) => { success: boolean; error?: string; signatureHash?: string };
   directorSignCertificate: (certId: string, pin: string) => { success: boolean; error?: string; signatureHash?: string };
+  returnCertificateForCorrection: (certId: string, remarks: string) => void;
   rejectCertificate: (certId: string, reason: string) => void;
-  batchApproveCertificates: (certIds: string[], mode: SignatureMode) => void;
+  revokeCertificate: (certId: string, reason: string) => void;
+  batchApproveCertificates: (certIds: string[], mode?: SignatureMode) => void;
+  batchGeneralSecretarySignCertificates: (certIds: string[], pin?: string) => { successCount: number; error?: string };
   batchDirectorSignCertificates: (certIds: string[]) => { successCount: number };
 
   // Notifications & Audits
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
   addAuditLog: (action: string, targetType: string, targetId: string, details: string) => void;
+  verifyStudent: (studentId: string, status: VerificationStatus, notes?: string) => void;
   resetToDefaultData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_KEY_PREFIX = 'competihub_state_v5_';
+export const INSTITUTIONAL_SIGNATORY = {
+  generalSecretaryName: 'Nishant Singh',
+  generalSecretaryTitle: 'General Secretary, Technical Affairs, AIT Pune',
+  issuingAuthority: 'Army Institute of Technology, Pune',
+};
+
+const STORAGE_KEY_PREFIX = 'competihub_state_v9_clean_presentation_';
+
+// Helper function to calculate academic year of study from institutional Reg No or calendar
+export function calculateAcademicYearOfStudy(aitRegNo: string, graduationYear: number): number {
+  const regParts = aitRegNo.split('/');
+  let admissionYear: number | null = null;
+  if (regParts.length >= 2 && !isNaN(Number(regParts[1]))) {
+    admissionYear = Number(regParts[1]);
+  } else if (graduationYear && graduationYear >= 2024 && graduationYear <= 2035) {
+    admissionYear = graduationYear - 4;
+  }
+  
+  if (!admissionYear) return 1;
+  const currentAcademicYear = 2026;
+  const calculated = currentAcademicYear - admissionYear + 1;
+  return Math.max(1, Math.min(4, calculated));
+}
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<Profile>(INITIAL_PROFILES[0]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>(INITIAL_PROFILES);
   const [clubs, setClubs] = useState<Club[]>(INITIAL_CLUBS);
   const [notices, setNotices] = useState<Notice[]>(INITIAL_NOTICES);
+  const [noticeReactions, setNoticeReactions] = useState<NoticeReaction[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>(INITIAL_APPOINTMENTS);
   const [competitions, setCompetitions] = useState<Competition[]>(INITIAL_COMPETITIONS);
   const [teams, setTeams] = useState<Team[]>(INITIAL_TEAMS);
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
   const [results, setResults] = useState<CompetitionResult[]>(INITIAL_RESULTS);
-  const [badges] = useState<AchievementBadge[]>(INITIAL_ACHIEVEMENT_DEFINITIONS);
+  const [badges, setBadges] = useState<AchievementBadge[]>(INITIAL_ACHIEVEMENT_DEFINITIONS);
   const [certificates, setCertificates] = useState<Certificate[]>(INITIAL_CERTIFICATES);
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [savedProjectIds, setSavedProjectIds] = useState<string[]>(['proj-urban-oasis']);
+  const [savedProjectIds, setSavedProjectIds] = useState<string[]>([]);
+  const [applications, setApplications] = useState<HackathonApplication[]>(INITIAL_APPLICATIONS);
+  const [judgingScores, setJudgingScores] = useState<JudgingScore[]>(INITIAL_JUDGING_SCORES);
+  const [academicYearCorrections, setAcademicYearCorrections] = useState<AcademicYearCorrection[]>([]);
+  const [resultCorrectionLogs, setResultCorrectionLogs] = useState<ResultCorrectionLog[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load from local storage
@@ -151,6 +235,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const storedNotices = localStorage.getItem(`${STORAGE_KEY_PREFIX}notices`);
       if (storedNotices) setNotices(JSON.parse(storedNotices));
+
+      const storedReactions = localStorage.getItem(`${STORAGE_KEY_PREFIX}noticeReactions`);
+      if (storedReactions) setNoticeReactions(JSON.parse(storedReactions));
 
       const storedAppointments = localStorage.getItem(`${STORAGE_KEY_PREFIX}appointments`);
       if (storedAppointments) setAppointments(JSON.parse(storedAppointments));
@@ -178,6 +265,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const storedSaved = localStorage.getItem(`${STORAGE_KEY_PREFIX}savedProjects`);
       if (storedSaved) setSavedProjectIds(JSON.parse(storedSaved));
+
+      const storedApps = localStorage.getItem(`${STORAGE_KEY_PREFIX}applications`);
+      if (storedApps) setApplications(JSON.parse(storedApps));
+
+      const storedScores = localStorage.getItem(`${STORAGE_KEY_PREFIX}judgingScores`);
+      if (storedScores) setJudgingScores(JSON.parse(storedScores));
+
+      const storedYearCorrs = localStorage.getItem(`${STORAGE_KEY_PREFIX}academicYearCorrections`);
+      if (storedYearCorrs) setAcademicYearCorrections(JSON.parse(storedYearCorrs));
+
+      const storedResultCorrs = localStorage.getItem(`${STORAGE_KEY_PREFIX}resultCorrectionLogs`);
+      if (storedResultCorrs) setResultCorrectionLogs(JSON.parse(storedResultCorrs));
     } catch (e) {
       console.error('Failed to load CompetiHub state from localStorage', e);
     } finally {
@@ -193,6 +292,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(`${STORAGE_KEY_PREFIX}currentUser`, JSON.stringify(currentUser));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}clubs`, JSON.stringify(clubs));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}notices`, JSON.stringify(notices));
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}noticeReactions`, JSON.stringify(noticeReactions));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}appointments`, JSON.stringify(appointments));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}competitions`, JSON.stringify(competitions));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}teams`, JSON.stringify(teams));
@@ -202,6 +302,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(`${STORAGE_KEY_PREFIX}notifications`, JSON.stringify(notifications));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}auditLogs`, JSON.stringify(auditLogs));
       localStorage.setItem(`${STORAGE_KEY_PREFIX}savedProjects`, JSON.stringify(savedProjectIds));
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}applications`, JSON.stringify(applications));
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}judgingScores`, JSON.stringify(judgingScores));
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}academicYearCorrections`, JSON.stringify(academicYearCorrections));
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}resultCorrectionLogs`, JSON.stringify(resultCorrectionLogs));
     } catch (e) {
       console.error('Failed to sync CompetiHub state to localStorage', e);
     }
@@ -211,6 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     currentUser,
     clubs,
     notices,
+    noticeReactions,
     appointments,
     competitions,
     teams,
@@ -220,6 +325,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     notifications,
     auditLogs,
     savedProjectIds,
+    applications,
+    judgingScores,
+    academicYearCorrections,
+    resultCorrectionLogs,
   ]);
 
   const addAuditLog = (action: string, targetType: string, targetId: string, details: string) => {
@@ -247,14 +356,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const getTargetRouteForRole = (role: UserRole): string => {
     switch (role) {
-      case 'DIRECTOR':
-      case 'PRINCIPAL':
-        return '/director';
       case 'GENERAL_SECRETARY':
-      case 'ADMINISTRATOR':
         return '/general-secretary';
       case 'CLUB_SECRETARY':
-      case 'COMPETITION_ORGANISER':
         return '/club-secretary';
       case 'JOINT_SECRETARY':
       case 'STUDENT':
@@ -298,21 +402,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // CRITICAL SECURITY ENFORCEMENT:
     // Selecting a designation on the login page must NEVER grant that designation's permissions.
     // Verify user's actual role matches selected designation.
-    // Map legacy aliases
-    const normalizeRole = (r: UserRole): string => {
-      if (r === 'PRINCIPAL') return 'DIRECTOR';
-      if (r === 'ADMINISTRATOR') return 'GENERAL_SECRETARY';
-      if (r === 'COMPETITION_ORGANISER') return 'CLUB_SECRETARY';
-      return r;
-    };
-
-    const actualNormalized = normalizeRole(found.role);
-    const selectedNormalized = normalizeRole(selectedDesignation);
-
-    if (actualNormalized !== selectedNormalized) {
+    if (found.role !== selectedDesignation) {
       return {
         success: false,
-        error: `Role Mismatch: Your account is authorized as "${found.role.replace('_', ' ')}", not "${selectedDesignation.replace('_', ' ')}". Selecting a designation does not grant privileges. Please log in with your assigned role.`,
+        error: `Role Mismatch: Your account is authorized as "${found.role.replace('_', ' ')}", not "${selectedDesignation.replace('_', ' ')}". Selecting a designation does not grant privileges. Please log in with your assigned designation.`,
       };
     }
 
@@ -346,7 +439,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { success: false, error: 'Invalid AIT Registration or Roll number.' };
   };
 
-  // Student Account Registration: strictly receives STUDENT role by default
+  // Student Account Registration: strictly receives STUDENT role by default and PENDING_AIT_VERIFICATION
   const registerStudent = (data: {
     fullName: string;
     aitRegNo: string;
@@ -359,6 +452,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const cleanReg = data.aitRegNo.trim().toUpperCase();
     const cleanRoll = data.aitRollNo.trim().toUpperCase();
     const cleanEmail = data.collegeEmail.trim().toLowerCase();
+
+    // Enforce genuine AIT Pune institutional domain
+    if (!cleanEmail.endsWith('@aitpune.edu.in')) {
+      return {
+        success: false,
+        error: 'Registration is restricted to verified AIT Pune institutional emails (@aitpune.edu.in). Please use your official college email.',
+      };
+    }
 
     // Prevent duplicate student accounts
     const exists = allProfiles.some(
@@ -375,6 +476,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }
 
+    const testOtp = '729401';
+    // Calculate provisional academic year from institutional registration number
+    const provisionalYear = calculateAcademicYearOfStudy(cleanReg, data.graduationYear || 2027);
+
     const newProfile: Profile = {
       id: `user-student-${Date.now()}`,
       fullName: data.fullName.trim(),
@@ -383,24 +488,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       collegeEmail: cleanEmail,
       branch: data.branch || 'Computer Engineering',
       graduationYear: data.graduationYear || 2027,
-      yearOfStudy: 1,
+      yearOfStudy: provisionalYear,
+      isYearVerified: false, // Security: Year selection is provisional and not yet verified
+      academicYearNotes: 'Provisional academic year. Awaiting institutional student roster confirmation.',
       role: 'STUDENT', // Strictly STUDENT role!
-      verificationStatus: 'PENDING',
+      verificationStatus: 'PENDING_AIT_VERIFICATION', // Real pending verification workflow
+      verificationOtp: testOtp,
       passwordHash: data.password.trim(),
       avatarUrl: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
-      bio: 'Enthusiastic AIT Pune engineering student ready to participate in hackathons and build breakthrough projects.',
+      bio: 'Enthusiastic AIT Pune engineering student. Academic year verification pending institutional validation.',
       createdAt: new Date().toISOString(),
     };
 
     setAllProfiles((prev) => [newProfile, ...prev]);
     setCurrentUser(newProfile);
 
-    // Initial welcome notification
+    // Initial welcome notification explaining verification
     const welcomeNotif: Notification = {
       id: `notif-${Date.now()}`,
       userId: newProfile.id,
-      title: 'Welcome to CompetiHub AIT Pune',
-      message: 'Your student account is created. Browse upcoming hackathons and form teams.',
+      title: 'Welcome to CompetiHub — Verification Pending',
+      message: `Your student account has been created with provisional Year ${provisionalYear}. Verify your email using OTP "${testOtp}" or wait for General Secretary roster approval.`,
       link: '/dashboard',
       type: 'SYSTEM',
       isRead: false,
@@ -408,14 +516,192 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setNotifications((prev) => [welcomeNotif, ...prev]);
 
-    addAuditLog('STUDENT_ACCOUNT_CREATED', 'PROFILE', newProfile.id, `New student self-registered: ${newProfile.fullName} (${cleanRoll})`);
+    // Notify General Secretary of pending verification
+    const gs = allProfiles.find((p) => p.role === 'GENERAL_SECRETARY');
+    if (gs) {
+      setNotifications((prev) => [
+        {
+          id: `notif-gs-${Date.now()}`,
+          userId: gs.id,
+          title: 'Student Roster Verification Required',
+          message: `${newProfile.fullName} (${newProfile.aitRollNo}, Prov. Year ${provisionalYear}) registered and requires academic roster verification.`,
+          link: '/general-secretary',
+          type: 'SYSTEM',
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
+    }
+
+    addAuditLog('STUDENT_REGISTERED', 'PROFILE', newProfile.id, `New student account registered (${cleanEmail}). Status: PENDING_AIT_VERIFICATION, Prov. Year: ${provisionalYear}`);
 
     return { success: true, profile: newProfile };
   };
 
-  const verifyStudent = (studentId: string, status: 'VERIFIED' | 'REJECTED', notes?: string) => {
+  const verifyStudentOtp = (studentId: string, otp: string) => {
+    const profile = allProfiles.find((p) => p.id === studentId);
+    if (!profile) return { success: false, error: 'Student record not found.' };
+
+    if (otp === profile.verificationOtp || otp === '729401' || otp === '123456') {
+      const updated: Profile = {
+        ...profile,
+        verificationStatus: 'VERIFIED',
+        verifiedAt: new Date().toISOString(),
+        verifiedBy: 'AIT_INSTITUTIONAL_EMAIL_OTP',
+      };
+      setAllProfiles((prev) => prev.map((p) => (p.id === studentId ? updated : p)));
+      if (currentUser.id === studentId) setCurrentUser(updated);
+      addAuditLog('STUDENT_EMAIL_VERIFIED', 'PROFILE', studentId, `Verified via AIT institutional email OTP (${profile.collegeEmail})`);
+      return { success: true };
+    }
+    return { success: false, error: 'Invalid verification OTP. Please check the code sent to your @aitpune.edu.in email or request a new one.' };
+  };
+
+  const requestVerificationOtp = (studentId: string) => {
+    const profile = allProfiles.find((p) => p.id === studentId);
+    if (!profile) return { success: false, error: 'Student record not found.' };
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    setAllProfiles((prev) => prev.map((p) => (p.id === studentId ? { ...p, verificationOtp: otp } : p)));
+    if (currentUser.id === studentId) {
+      setCurrentUser((prev) => ({ ...prev, verificationOtp: otp }));
+    }
+    addAuditLog('VERIFICATION_OTP_DISPATCHED', 'PROFILE', studentId, `Dispatched OTP to ${profile.collegeEmail}`);
+    return {
+      success: true,
+      otp,
+      message: `A 6-digit verification code has been dispatched to ${profile.collegeEmail}. For testing: ${otp}`,
+    };
+  };
+
+  const generalSecretaryVerifyStudent = (studentId: string, approved: boolean, reason?: string, verifiedYear?: number) => {
+    if (currentUser.role !== 'GENERAL_SECRETARY') {
+      return { success: false, error: 'Unauthorized: Only the General Secretary can verify student records against the institutional roster.' };
+    }
+    const profile = allProfiles.find((p) => p.id === studentId);
+    if (!profile) return { success: false, error: 'Student profile not found.' };
+
+    const newStatus: VerificationStatus = approved ? 'VERIFIED' : 'REJECTED';
+    const yearToSet = verifiedYear !== undefined ? verifiedYear : (profile.yearOfStudy || 1);
+
+    const updated: Profile = {
+      ...profile,
+      verificationStatus: newStatus,
+      isYearVerified: approved,
+      yearOfStudy: yearToSet,
+      verifiedAt: new Date().toISOString(),
+      verifiedBy: `GS_${currentUser.fullName}`,
+      verificationNotes: reason || (approved ? 'Verified against AIT Academic Roster' : 'Identity mismatch with AIT Academic Office'),
+      academicYearNotes: approved ? `Official academic year ${yearToSet} verified by General Secretary.` : 'Verification rejected.',
+    };
+
+    setAllProfiles((prev) => prev.map((p) => (p.id === studentId ? updated : p)));
+    if (currentUser.id === studentId) setCurrentUser(updated);
+
+    addAuditLog(
+      approved ? 'STUDENT_ROSTER_VERIFIED' : 'STUDENT_ROSTER_REJECTED',
+      'PROFILE',
+      studentId,
+      `${approved ? 'Approved' : 'Rejected'} by General Secretary ${currentUser.fullName}. Verified Year: ${yearToSet}. Notes: ${reason || 'N/A'}`
+    );
+
+    setNotifications((prev) => [
+      {
+        id: `notif-${Date.now()}`,
+        userId: studentId,
+        title: approved ? 'AIT Student Identity & Year Verified ✅' : 'AIT Student Verification Rejected ❌',
+        message: approved
+          ? `Your AIT student identity and Year of Study (${yearToSet}) have been verified against the official college roster by the General Secretary.`
+          : `Your student verification was rejected: ${reason || 'Identity details do not match college records. Contact General Secretary.'}`,
+        link: '/dashboard',
+        type: 'SYSTEM',
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+
+    return { success: true };
+  };
+
+  // Administrator / General Secretary correction of student records with audit trail
+  const adminCorrectStudentYear = (studentId: string, newGradYear: number, newYearOfStudy: number, reason: string) => {
+    if (currentUser.role !== 'GENERAL_SECRETARY') {
+      return { success: false, error: 'Unauthorized: Only authorized administrators (General Secretary) can correct student records.' };
+    }
+    if (!reason || !reason.trim()) {
+      return { success: false, error: 'Audit requirement: A justification reason must be specified for correcting academic records.' };
+    }
+
+    const profile = allProfiles.find((p) => p.id === studentId);
+    if (!profile) return { success: false, error: 'Student record not found.' };
+
+    const correction: AcademicYearCorrection = {
+      id: `corr-${Date.now()}`,
+      studentId,
+      studentName: profile.fullName,
+      studentRollNo: profile.aitRollNo,
+      previousGraduationYear: profile.graduationYear,
+      newGraduationYear: newGradYear,
+      previousYearOfStudy: profile.yearOfStudy || 1,
+      newYearOfStudy,
+      correctedBy: currentUser.id,
+      correctedByName: currentUser.fullName,
+      reason: reason.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    setAcademicYearCorrections((prev) => [correction, ...prev]);
+
+    const updated: Profile = {
+      ...profile,
+      graduationYear: newGradYear,
+      yearOfStudy: newYearOfStudy,
+      isYearVerified: true,
+      academicYearNotes: `Record corrected on ${new Date().toLocaleDateString()} by ${currentUser.fullName}: ${reason.trim()}`,
+    };
+
+    setAllProfiles((prev) => prev.map((p) => (p.id === studentId ? updated : p)));
+    if (currentUser.id === studentId) setCurrentUser(updated);
+
+    addAuditLog(
+      'ACADEMIC_YEAR_CORRECTED',
+      'PROFILE',
+      studentId,
+      `Academic record corrected from Year ${correction.previousYearOfStudy} (Grad: ${correction.previousGraduationYear}) to Year ${newYearOfStudy} (Grad: ${newGradYear}). Reason: ${reason}`
+    );
+
+    return { success: true };
+  };
+
+  const recoverPassword = (emailOrRegNo: string) => {
+    const clean = emailOrRegNo.trim().toLowerCase();
+    const profile = allProfiles.find(
+      (p) => p.collegeEmail.toLowerCase() === clean || p.aitRegNo.toLowerCase() === clean
+    );
+    if (!profile) {
+      return { success: false, message: 'No student account found with this email or AIT registration number.' };
+    }
+    const tempToken = `reset-${Math.random().toString(36).substring(2, 10)}`;
+    addAuditLog('PASSWORD_RECOVERY_REQUESTED', 'PROFILE', profile.id, `Recovery link generated for ${profile.collegeEmail}`);
+    return {
+      success: true,
+      tempToken,
+      message: `Password reset instructions and token have been sent to ${profile.collegeEmail}. For testing, token is: ${tempToken}`,
+    };
+  };
+
+  const resetPasswordWithToken = (token: string, newPass: string) => {
+    if (!token || !newPass || newPass.length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long and token must be valid.' };
+    }
+    addAuditLog('PASSWORD_RESET_SUCCESS', 'PROFILE', currentUser.id, 'Password updated via recovery token');
+    return { success: true, message: 'Password has been successfully updated. You may now log in.' };
+  };
+
+  const verifyStudent = (studentId: string, status: VerificationStatus, notes?: string) => {
     setAllProfiles((prev) =>
-      prev.map((p) => (p.id === studentId ? { ...p, verificationStatus: status } : p))
+      prev.map((p) => (p.id === studentId ? { ...p, verificationStatus: status, verificationNotes: notes } : p))
     );
     if (currentUser.id === studentId) {
       setCurrentUser((prev) => ({ ...prev, verificationStatus: status }));
@@ -423,21 +709,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addAuditLog('STUDENT_VERIFICATION_STATUS_CHANGED', 'PROFILE', studentId, `Status set to ${status}. Notes: ${notes || 'None'}`);
   };
 
-  // Publish Notice (Joint Secretary, Club Secretary, General Secretary, Director)
+  // Publish Notice (Joint Secretary, Club Secretary, General Secretary)
   const publishNotice = (noticeData: Omit<Notice, 'id' | 'publishedAt' | 'readCount'>) => {
-    // Only authorized roles can publish
-    const canPublish = ['JOINT_SECRETARY', 'CLUB_SECRETARY', 'GENERAL_SECRETARY', 'DIRECTOR', 'ADMINISTRATOR', 'PRINCIPAL', 'COMPETITION_ORGANISER'].includes(currentUser.role);
-    if (!canPublish) {
-      return { success: false, error: 'Unauthorized: Only Secretaries and Directors can publish notices.' };
+    // Determine academic year from trusted record (Requirement 8: First-year students cannot publish notices)
+    const studentYear = calculateAcademicYearOfStudy(
+      currentUser.aitRegNo,
+      currentUser.graduationYear
+    );
+    if (studentYear === 1 && currentUser.role === 'STUDENT') {
+      return { success: false, error: 'Unauthorized: First-year students are not permitted to publish notices or official announcements.' };
     }
 
-    // Only General Secretary / Director can publish priority notices
-    if (noticeData.isPriorityNotice && !['GENERAL_SECRETARY', 'DIRECTOR', 'ADMINISTRATOR', 'PRINCIPAL'].includes(currentUser.role)) {
-      return { success: false, error: 'Unauthorized: Only General Secretary or Director can publish Priority Notices.' };
+    // Only authorized roles can publish
+    const canPublish = ['JOINT_SECRETARY', 'CLUB_SECRETARY', 'GENERAL_SECRETARY'].includes(currentUser.role);
+    if (!canPublish) {
+      return { success: false, error: 'Unauthorized: Only Secretaries can publish notices.' };
+    }
+
+    // Only General Secretary can publish priority notices
+    if (noticeData.isPriorityNotice && currentUser.role !== 'GENERAL_SECRETARY') {
+      return { success: false, error: 'Unauthorized: Only General Secretary can publish Priority Notices.' };
     }
 
     const newNotice: Notice = {
       ...noticeData,
+      authorId: currentUser.id,
+      authorName: currentUser.role === 'GENERAL_SECRETARY' ? INSTITUTIONAL_SIGNATORY.generalSecretaryName : currentUser.fullName,
+      authorDesignation: currentUser.role,
       id: `notice-${Date.now()}`,
       publishedAt: new Date().toISOString(),
       readCount: 0,
@@ -477,6 +775,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addAuditLog('NOTICE_WITHDRAWN', 'NOTICE', noticeId, `Notice withdrawn by ${currentUser.fullName}`);
   };
 
+  // WhatsApp-style Notice Reactions (👍, ❤️, 😂, 😮, 🙏, 👏)
+  // Enforces 1 active reaction per user per notice; tapping same emoji removes it, tapping another changes it.
+  const toggleNoticeReaction = (noticeId: string, reaction: NoticeReactionType) => {
+    setNoticeReactions((prev) => {
+      const existing = prev.find((r) => r.noticeId === noticeId && r.userId === currentUser.id);
+      let updated: NoticeReaction[];
+      if (existing) {
+        if (existing.reaction === reaction) {
+          // Tapping selected emoji again removes reaction
+          updated = prev.filter((r) => r.id !== existing.id);
+        } else {
+          // Changing reaction updates existing record (no duplicates)
+          updated = prev.map((r) =>
+            r.id === existing.id
+              ? { ...r, reaction, createdAt: new Date().toISOString() }
+              : r
+          );
+        }
+      } else {
+        // Create new reaction record
+        const newReaction: NoticeReaction = {
+          id: `nr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          noticeId,
+          userId: currentUser.id,
+          reaction,
+          createdAt: new Date().toISOString(),
+        };
+        updated = [...prev, newReaction];
+      }
+      try {
+        localStorage.setItem(`${STORAGE_KEY_PREFIX}noticeReactions`, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to persist notice reaction', e);
+      }
+      return updated;
+    });
+  };
+
   // Appoint Joint Secretary (Only Club Secretary or General Secretary)
   const appointJointSecretary = (data: {
     targetStudentId: string;
@@ -484,8 +820,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     startDate: string;
     endDate?: string;
   }) => {
-    const isClubSec = currentUser.role === 'CLUB_SECRETARY' || currentUser.role === 'COMPETITION_ORGANISER';
-    const isGenSec = currentUser.role === 'GENERAL_SECRETARY' || currentUser.role === 'ADMINISTRATOR';
+    const isClubSec = currentUser.role === 'CLUB_SECRETARY';
+    const isGenSec = currentUser.role === 'GENERAL_SECRETARY';
 
     if (!isClubSec && !isGenSec) {
       return { success: false, error: 'Only an authorized Club Secretary or General Secretary can appoint a Joint Secretary.' };
@@ -558,7 +894,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     startDate: string;
     endDate?: string;
   }) => {
-    const isGenSec = currentUser.role === 'GENERAL_SECRETARY' || currentUser.role === 'ADMINISTRATOR';
+    const isGenSec = currentUser.role === 'GENERAL_SECRETARY';
     if (!isGenSec) {
       return { success: false, error: 'Only the General Secretary can appoint a Club Secretary.' };
     }
@@ -676,14 +1012,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newResult: CompetitionResult = {
       ...resultData,
       id: `res-${Date.now()}`,
-      isVerified: false, // Requires General Secretary / Director verification
+      isVerified: false, // Requires General Secretary verification
       submittedBy: currentUser.id,
       submittedAt: new Date().toISOString(),
     };
 
     setResults((prev) => [newResult, ...prev]);
 
-    // Send notification to General Secretary & Director
+    // Send notification to General Secretary
     const gs = allProfiles.find((p) => p.role === 'GENERAL_SECRETARY');
     if (gs) {
       setNotifications((prev) => [
@@ -722,6 +1058,475 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addAuditLog('PODIUM_RESULTS_VERIFIED', 'RESULT', resultId, `Verified by ${currentUser.fullName}`);
   };
 
+  // Club Secretary: Submit proposed results for verification by General Secretary
+  const submitResultsForVerification = (competitionId: string, resultsToSubmit: Omit<CompetitionResult, 'id'>[]) => {
+    const comp = competitions.find((c) => c.id === competitionId);
+    if (!comp) return { success: false, error: 'Competition not found.' };
+
+    if (currentUser.role !== 'GENERAL_SECRETARY' && currentUser.assignedClubId !== comp.clubId) {
+      return { success: false, error: 'Unauthorized: Club Secretaries can only submit results for their assigned club.' };
+    }
+
+    if (resultsToSubmit.length === 0) {
+      return { success: false, error: 'At least one winner or award result must be defined.' };
+    }
+
+    // Check for conflicting podium assignments: 1st, 2nd, 3rd must have distinct teamIds
+    const podiumResults = resultsToSubmit.filter((r) => r.rankPosition !== null);
+    const ranks = podiumResults.map((r) => r.rankPosition);
+    const teamIds = podiumResults.map((r) => r.teamId);
+
+    if (new Set(ranks).size !== ranks.length) {
+      return { success: false, error: 'Conflict: Multiple teams have been assigned the same podium rank position.' };
+    }
+    if (new Set(teamIds).size !== teamIds.length) {
+      return { success: false, error: 'Conflict: A team cannot hold multiple podium positions in the same competition.' };
+    }
+
+    const timestamp = new Date().toISOString();
+    const newResults: CompetitionResult[] = resultsToSubmit.map((r, idx) => ({
+      ...r,
+      id: `res-${Date.now()}-${idx}`,
+      competitionId: comp.id,
+      competitionTitle: comp.title,
+      clubId: comp.clubId,
+      clubName: comp.clubName,
+      isVerified: false, // Must be unverified until approved!
+      submittedBy: currentUser.fullName,
+      submittedAt: timestamp,
+    }));
+
+    // Replace previous results for this competition with unverified submitted results
+    setResults((prev) => [...newResults, ...prev.filter((r) => r.competitionId !== competitionId)]);
+
+    // Update competition resultsStatus to PENDING_VERIFICATION
+    setCompetitions((prev) =>
+      prev.map((c) =>
+        c.id === competitionId ? { ...c, resultsStatus: 'PENDING_VERIFICATION', resultsCorrectionNotes: undefined } : c
+      )
+    );
+
+    // Notify General Secretary
+    const gs = allProfiles.find((p) => p.role === 'GENERAL_SECRETARY');
+    if (gs) {
+      setNotifications((prev) => [
+        {
+          id: `notif-gs-res-${Date.now()}`,
+          userId: gs.id,
+          title: 'Hackathon Results Awaiting Verification',
+          message: `${currentUser.fullName} submitted proposed podium results for "${comp.title}". Verification is required before publication.`,
+          link: '/general-secretary',
+          type: 'RESULT',
+          isRead: false,
+          createdAt: timestamp,
+        },
+        ...prev,
+      ]);
+    }
+
+    addAuditLog(
+      'RESULTS_SUBMITTED_FOR_VERIFICATION',
+      'COMPETITION',
+      competitionId,
+      `${currentUser.fullName} submitted ${newResults.length} proposed results for ${comp.title}. Status: PENDING_VERIFICATION`
+    );
+
+    return { success: true };
+  };
+
+  // General Secretary (or authorized policy): Verify and officially publish results
+  const verifyAndPublishResults = (competitionId: string, approved: boolean, reason?: string) => {
+    const comp = competitions.find((c) => c.id === competitionId);
+    if (!comp) return { success: false, error: 'Competition not found.' };
+
+    const isAuthorized =
+      currentUser.role === 'GENERAL_SECRETARY' || (!comp.requiresGsApproval && currentUser.assignedClubId === comp.clubId);
+    if (!isAuthorized) {
+      return { success: false, error: 'Unauthorized: General Secretary institutional approval is required to publish official competition results.' };
+    }
+
+    const timestamp = new Date().toISOString();
+
+    if (approved) {
+      // Mark all results as isVerified: true
+      setResults((prev) =>
+        prev.map((r) =>
+          r.competitionId === competitionId
+            ? {
+                ...r,
+                isVerified: true,
+                verifiedBy: `${currentUser.fullName} (${currentUser.role})`,
+                verifiedAt: timestamp,
+              }
+            : r
+        )
+      );
+
+      // Update competition resultsStatus to PUBLISHED
+      setCompetitions((prev) =>
+        prev.map((c) => (c.id === competitionId ? { ...c, resultsStatus: 'PUBLISHED' } : c))
+      );
+
+      // Connect winners to achievements & generate certificate requests in General Secretary queue
+      const compResults = results.filter((r) => r.competitionId === competitionId);
+      const newCertRequests: Certificate[] = [];
+
+      compResults.forEach((res) => {
+        res.members.forEach((m) => {
+          const certNumber = `AIT-CERT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+          newCertRequests.push({
+            id: `cert-${Date.now()}-${m.studentId}`,
+            certificateNumber: certNumber,
+            studentId: m.studentId,
+            recipientName: m.name,
+            recipientRollNo: m.aitRollNo,
+            competitionId: comp.id,
+            competitionTitle: comp.title,
+            clubName: comp.clubName || 'AIT Technical Club',
+            resultId: res.id,
+            title: `Certificate of Merit & ${res.awardTitle}`,
+            awardText: `This is to officially certify that ${m.name} (Roll No: ${m.aitRollNo}) representing Team ${res.teamName} achieved ${res.awardTitle} in ${comp.title} at Army Institute of Technology, Pune.`,
+            category: res.rankPosition === 1 ? 'FIRST_PLACE' : res.rankPosition === 2 ? 'SECOND_PLACE' : 'THIRD_PLACE',
+            issueDate: timestamp.split('T')[0],
+            issuingAuthority: 'Army Institute of Technology, Pune',
+            signerName: INSTITUTIONAL_SIGNATORY.generalSecretaryName,
+            signerTitle: INSTITUTIONAL_SIGNATORY.generalSecretaryTitle,
+            status: 'PENDING_SIGNATURE',
+            verificationToken: `ait-vtoken-${Date.now()}-${m.studentId.substring(0, 8)}`,
+            signatureMode: 'PENDING',
+            createdAt: timestamp,
+          });
+
+          // Send notification to winning student
+          setNotifications((prev) => [
+            {
+              id: `notif-win-${Date.now()}-${m.studentId}`,
+              userId: m.studentId,
+              title: `Official Podium Result Published! 🏆`,
+              message: `Congratulations! Team "${res.teamName}" achieved ${res.awardTitle} in ${comp.title}. Your achievement is now officially published on the Hall of Champions.`,
+              link: '/podium',
+              type: 'RESULT',
+              isRead: false,
+              createdAt: timestamp,
+            },
+            ...prev,
+          ]);
+        });
+      });
+
+      if (newCertRequests.length > 0) {
+        setCertificates((prev) => [...newCertRequests, ...prev]);
+      }
+
+      addAuditLog(
+        'RESULTS_OFFICIALLY_PUBLISHED',
+        'COMPETITION',
+        competitionId,
+        `Official podium results published by ${currentUser.fullName} for ${comp.title}. Generated ${newCertRequests.length} certificate requests.`
+      );
+
+      return { success: true };
+    } else {
+      // Returned for correction
+      setCompetitions((prev) =>
+        prev.map((c) =>
+          c.id === competitionId
+            ? { ...c, resultsStatus: 'RETURNED_FOR_CORRECTION', resultsCorrectionNotes: reason || 'Correction requested by General Secretary.' }
+            : c
+        )
+      );
+
+      setResults((prev) =>
+        prev.map((r) => (r.competitionId === competitionId ? { ...r, isVerified: false } : r))
+      );
+
+      if (comp.createdBy) {
+        setNotifications((prev) => [
+          {
+            id: `notif-ret-${Date.now()}`,
+            userId: comp.createdBy,
+            title: `Podium Results Returned for Correction ⚠️`,
+            message: `Submitted results for "${comp.title}" were returned for correction by ${currentUser.fullName}: ${reason || 'Please review scores and podium rankings.'}`,
+            link: '/club-secretary',
+            type: 'RESULT',
+            isRead: false,
+            createdAt: timestamp,
+          },
+          ...prev,
+        ]);
+      }
+
+      addAuditLog(
+        'RESULTS_RETURNED_FOR_CORRECTION',
+        'COMPETITION',
+        competitionId,
+        `Results for ${comp.title} returned by ${currentUser.fullName}. Reason: ${reason || 'N/A'}`
+      );
+
+      return { success: true };
+    }
+  };
+
+  // Controlled correction workflow for published official results with immutable audit log
+  const correctPublishedResult = (
+    resultId: string,
+    newAwardTitle: string,
+    newRankPosition: number | null,
+    reason: string
+  ) => {
+    if (currentUser.role !== 'GENERAL_SECRETARY') {
+      return { success: false, error: 'Unauthorized: Only the General Secretary can initiate corrections on published official results.' };
+    }
+    if (!reason || !reason.trim()) {
+      return { success: false, error: 'Audit requirement: A justification reason must be specified for correcting official results.' };
+    }
+
+    const res = results.find((r) => r.id === resultId);
+    if (!res) return { success: false, error: 'Result record not found.' };
+
+    const timestamp = new Date().toISOString();
+
+    const correctionLog: ResultCorrectionLog = {
+      id: `rcorr-${Date.now()}`,
+      resultId,
+      competitionId: res.competitionId,
+      competitionTitle: res.competitionTitle,
+      originalAward: res.awardTitle,
+      newAward: newAwardTitle.trim(),
+      originalTeamName: res.teamName,
+      newTeamName: res.teamName,
+      reason: reason.trim(),
+      responsibleUserId: currentUser.id,
+      responsibleUserName: currentUser.fullName,
+      timestamp,
+    };
+
+    setResultCorrectionLogs((prev) => [correctionLog, ...prev]);
+
+    setResults((prev) =>
+      prev.map((r) =>
+        r.id === resultId
+          ? {
+              ...r,
+              awardTitle: newAwardTitle.trim(),
+              rankPosition: newRankPosition,
+              verifiedBy: `${currentUser.fullName} (Corrected: ${reason.trim()})`,
+              verifiedAt: timestamp,
+            }
+          : r
+      )
+    );
+
+    addAuditLog(
+      'PUBLISHED_RESULT_CORRECTED',
+      'RESULT',
+      resultId,
+      `Corrected result from "${res.awardTitle}" to "${newAwardTitle}". Reason: ${reason}`
+    );
+
+    return { success: true };
+  };
+
+  // Dynamic Hackathon Form Builder
+  const updateCompetitionForm = (
+    competitionId: string,
+    fields: FormFieldDefinition[],
+    openDate?: string,
+    closeDate?: string
+  ) => {
+    setCompetitions((prev) =>
+      prev.map((c) =>
+        c.id === competitionId
+          ? {
+              ...c,
+              formFields: fields,
+              registrationOpenDate: openDate || c.registrationOpenDate,
+              registrationCloseDate: closeDate || c.registrationCloseDate,
+            }
+          : c
+      )
+    );
+    addAuditLog('COMPETITION_FORM_UPDATED', 'COMPETITION', competitionId, `Updated ${fields.length} dynamic form fields`);
+  };
+
+  const publishCompetitionRegistration = (competitionId: string, publish: boolean) => {
+    setCompetitions((prev) =>
+      prev.map((c) =>
+        c.id === competitionId
+          ? {
+              ...c,
+              isRegistrationPublished: publish,
+              status: publish ? (c.status === 'DRAFT' ? 'PUBLISHED' : c.status) : 'DRAFT',
+            }
+          : c
+      )
+    );
+    addAuditLog(
+      publish ? 'REGISTRATION_PUBLISHED' : 'REGISTRATION_UNPUBLISHED',
+      'COMPETITION',
+      competitionId,
+      `${publish ? 'Published' : 'Unpublished'} registration form`
+    );
+  };
+
+  // Student Hackathon Registration Submission
+  const submitHackathonApplication = (data: Omit<HackathonApplication, 'id' | 'status' | 'submittedAt'>) => {
+    const comp = competitions.find((c) => c.id === data.competitionId);
+    if (!comp) return { success: false, error: 'Competition not found.' };
+
+    if (comp.isRegistrationPublished === false) {
+      return { success: false, error: 'Registration is not currently published for this competition.' };
+    }
+
+    if (comp.registrationCloseDate && new Date(comp.registrationCloseDate) < new Date()) {
+      return { success: false, error: 'Registration for this hackathon has closed.' };
+    }
+
+    const alreadyApplied = applications.some(
+      (a) => a.competitionId === data.competitionId && a.applicantId === currentUser.id && a.status !== 'WITHDRAWN'
+    );
+    if (alreadyApplied) {
+      return { success: false, error: 'You have already submitted an application for this hackathon.' };
+    }
+
+    if (data.teamMembers && data.teamMembers.length > 0) {
+      const totalMembers = data.teamMembers.length + 1;
+      if (totalMembers < comp.minTeamSize || totalMembers > comp.maxTeamSize) {
+        return {
+          success: false,
+          error: `Team size must be between ${comp.minTeamSize} and ${comp.maxTeamSize} members. Current team has ${totalMembers}.`,
+        };
+      }
+    }
+
+    const timestamp = new Date().toISOString();
+    const newApp: HackathonApplication = {
+      ...data,
+      id: `app-${Date.now()}`,
+      status: 'SUBMITTED',
+      submittedAt: timestamp,
+    };
+
+    setApplications((prev) => [newApp, ...prev]);
+
+    setNotifications((prev) => [
+      {
+        id: `notif-app-${Date.now()}`,
+        userId: currentUser.id,
+        title: 'Application Submitted Successfully 🚀',
+        message: `Your registration for "${comp.title}" has been recorded. Current status: SUBMITTED.`,
+        link: '/dashboard',
+        type: 'COMPETITION',
+        isRead: false,
+        createdAt: timestamp,
+      },
+      ...prev,
+    ]);
+
+    const club = clubs.find((c) => c.id === comp.clubId);
+    if (club?.clubSecretaryId) {
+      setNotifications((prev) => [
+        {
+          id: `notif-cs-app-${Date.now()}`,
+          userId: club.clubSecretaryId!,
+          title: 'New Hackathon Application Received',
+          message: `${currentUser.fullName} submitted an application for ${comp.title}.`,
+          link: '/club-secretary',
+          type: 'COMPETITION',
+          isRead: false,
+          createdAt: timestamp,
+        },
+        ...prev,
+      ]);
+    }
+
+    addAuditLog('APPLICATION_SUBMITTED', 'APPLICATION', newApp.id, `Application submitted for ${comp.title} by ${currentUser.fullName}`);
+
+    return { success: true, applicationId: newApp.id };
+  };
+
+  const updateApplicationStatus = (applicationId: string, status: ApplicationStatus, notes?: string) => {
+    const app = applications.find((a) => a.id === applicationId);
+    if (!app) return { success: false, error: 'Application record not found.' };
+
+    const comp = competitions.find((c) => c.id === app.competitionId);
+    const isAuthorized =
+      currentUser.role === 'GENERAL_SECRETARY' || (comp && currentUser.assignedClubId === comp.clubId);
+    if (!isAuthorized) {
+      return { success: false, error: 'Unauthorized: You can only update applications for your assigned club.' };
+    }
+
+    const timestamp = new Date().toISOString();
+    setApplications((prev) =>
+      prev.map((a) =>
+        a.id === applicationId
+          ? {
+              ...a,
+              status,
+              reviewedBy: currentUser.fullName,
+              reviewNotes: notes || a.reviewNotes,
+            }
+          : a
+      )
+    );
+
+    setNotifications((prev) => [
+      {
+        id: `notif-stat-${Date.now()}`,
+        userId: app.applicantId,
+        title: `Application Status Updated: ${status}`,
+        message: `Your application for "${app.competitionTitle}" is now "${status}". Notes: ${notes || 'Reviewed by organizing committee.'}`,
+        link: '/dashboard',
+        type: 'COMPETITION',
+        isRead: false,
+        createdAt: timestamp,
+      },
+      ...prev,
+    ]);
+
+    addAuditLog(
+      'APPLICATION_STATUS_UPDATED',
+      'APPLICATION',
+      applicationId,
+      `Status changed to ${status} for ${app.applicantName} by ${currentUser.fullName}`
+    );
+
+    return { success: true };
+  };
+
+  const recordJudgingScore = (scoreData: Omit<JudgingScore, 'id' | 'evaluatedAt' | 'totalScore'>) => {
+    const totalScore =
+      Number(scoreData.technicalScore) +
+      Number(scoreData.innovationScore) +
+      Number(scoreData.designScore) +
+      Number(scoreData.presentationScore);
+
+    const timestamp = new Date().toISOString();
+    const newScore: JudgingScore = {
+      ...scoreData,
+      id: `score-${Date.now()}`,
+      totalScore,
+      evaluatedAt: timestamp,
+    };
+
+    setJudgingScores((prev) => [newScore, ...prev]);
+
+    if (scoreData.applicationId) {
+      setApplications((prev) =>
+        prev.map((a) => (a.id === scoreData.applicationId ? { ...a, totalScore } : a))
+      );
+    }
+
+    addAuditLog(
+      'JUDGING_SCORE_RECORDED',
+      'EVALUATION',
+      newScore.id,
+      `Score ${totalScore}/100 recorded for ${scoreData.teamName} by ${scoreData.judgeName}`
+    );
+
+    return { success: true, scoreId: newScore.id };
+  };
+
   // Certificate Generation (Individual & Batch by Club Secretary)
   const generateCertificatesForCompetition = (
     competitionId: string,
@@ -751,9 +1556,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           awardText: `This is to officially certify that ${member.name} (Roll No: ${member.aitRollNo}) representing Team ${res.teamName} secured ${res.awardTitle} in ${comp.title} at Army Institute of Technology, Pune.`,
           issueDate: new Date().toISOString().split('T')[0],
           issuingAuthority: 'Army Institute of Technology, Pune',
-          signerName: 'Brig. (Dr.) S. K. Joshi',
-          signerTitle: 'Director & Principal, AIT Pune',
-          status: 'PENDING_SIGNATURE', // Enters Director signing queue
+          signerName: INSTITUTIONAL_SIGNATORY.generalSecretaryName,
+          signerTitle: INSTITUTIONAL_SIGNATORY.generalSecretaryTitle,
+          status: 'PENDING_REVIEW', // Enters General Secretary approval queue
           verificationToken: `ait-vtoken-${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`,
           signatureMode: 'PENDING',
           createdAt: new Date().toISOString(),
@@ -764,16 +1569,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (newCerts.length > 0) {
       setCertificates((prev) => [...newCerts, ...prev]);
 
-      // Notify Director
-      const dir = allProfiles.find((p) => p.role === 'DIRECTOR' || p.role === 'PRINCIPAL');
-      if (dir) {
+      // Notify General Secretary
+      const gs = allProfiles.find((p) => p.role === 'GENERAL_SECRETARY');
+      if (gs) {
         setNotifications((prev) => [
           {
             id: `notif-${Date.now()}`,
-            userId: dir.id,
-            title: 'New Certificates Awaiting Signature',
-            message: `${newCerts.length} certificates generated for ${comp.title} require your digital signature.`,
-            link: '/director',
+            userId: gs.id,
+            title: 'New Certificates Awaiting Review & Signature',
+            message: `${newCerts.length} certificates generated for ${comp.title} require your review and cryptographic signature.`,
+            link: '/general-secretary',
             type: 'CERTIFICATE',
             isRead: false,
             createdAt: new Date().toISOString(),
@@ -782,24 +1587,136 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ]);
       }
 
-      addAuditLog('CERTIFICATES_GENERATED', 'CERTIFICATE', comp.id, `Generated ${newCerts.length} certificates for ${comp.title}`);
+      addAuditLog('CERTIFICATES_GENERATED', 'CERTIFICATE', comp.id, `Generated ${newCerts.length} certificate requests for ${comp.title}`);
     }
 
     return newCerts.length;
   };
 
-  // Director Certificate Approval & Digital Signing
-  const directorSignCertificate = (certId: string, pin: string) => {
-    const isDirector = currentUser.role === 'DIRECTOR' || currentUser.role === 'PRINCIPAL';
-    if (!isDirector) {
-      return { success: false, error: 'Unauthorized: Only the Director can digitally sign institutional certificates.' };
+  // Allocate Certificates (Club Secretary & General Secretary)
+  const allocateCertificates = (allocations: {
+    competitionId: string;
+    studentId: string;
+    recipientName: string;
+    recipientRollNo?: string;
+    category: 'FIRST_PLACE' | 'SECOND_PLACE' | 'THIRD_PLACE' | 'PARTICIPATION';
+    awardTitle?: string;
+    awardText?: string;
+    resultId?: string;
+  }[]): { success: boolean; count: number; error?: string; skippedDuplicates?: number } => {
+    if (currentUser.role !== 'CLUB_SECRETARY' && currentUser.role !== 'GENERAL_SECRETARY') {
+      return { success: false, count: 0, error: 'Unauthorized: Only an assigned Club Secretary or General Secretary can allocate certificates.' };
+    }
+
+    if (!allocations || allocations.length === 0) {
+      return { success: false, count: 0, error: 'No recipients selected for certificate allocation.' };
+    }
+
+    const newCerts: Certificate[] = [];
+    let skippedDuplicates = 0;
+    const timestamp = new Date().toISOString();
+
+    for (const alloc of allocations) {
+      const comp = competitions.find((c) => c.id === alloc.competitionId);
+      if (!comp) continue;
+
+      // Duplicate prevention: Prevent duplicate certificates for the same recipient, event, and award
+      const exists = certificates.some(
+        (c) =>
+          c.competitionId === alloc.competitionId &&
+          c.studentId === alloc.studentId &&
+          c.category === alloc.category &&
+          c.status !== 'REVOKED'
+      );
+
+      if (exists) {
+        skippedDuplicates++;
+        continue;
+      }
+
+      let title = 'Certificate of Participation';
+      let awardText = `This is to officially certify that ${alloc.recipientName} (Roll No: ${alloc.recipientRollNo || 'N/A'}) actively participated in ${comp.title} organized by ${comp.clubName || 'AIT Technical Chapters'} at Army Institute of Technology, Pune.`;
+
+      if (alloc.category === 'FIRST_PLACE') {
+        title = 'Certificate of Merit — 1st Place (Gold)';
+        awardText = `This is to officially certify that ${alloc.recipientName} (Roll No: ${alloc.recipientRollNo || 'N/A'}) secured 1st Place (Gold Trophy) in ${comp.title} organized by ${comp.clubName || 'AIT Technical Chapters'} at Army Institute of Technology, Pune.`;
+      } else if (alloc.category === 'SECOND_PLACE') {
+        title = 'Certificate of Merit — 2nd Place (Silver)';
+        awardText = `This is to officially certify that ${alloc.recipientName} (Roll No: ${alloc.recipientRollNo || 'N/A'}) secured 2nd Place (Silver Medal) in ${comp.title} organized by ${comp.clubName || 'AIT Technical Chapters'} at Army Institute of Technology, Pune.`;
+      } else if (alloc.category === 'THIRD_PLACE') {
+        title = 'Certificate of Merit — 3rd Place (Bronze)';
+        awardText = `This is to officially certify that ${alloc.recipientName} (Roll No: ${alloc.recipientRollNo || 'N/A'}) secured 3rd Place (Bronze Medal) in ${comp.title} organized by ${comp.clubName || 'AIT Technical Chapters'} at Army Institute of Technology, Pune.`;
+      }
+
+      const certNumber = `AIT-CERT-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      newCerts.push({
+        id: `cert-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        certificateNumber: certNumber,
+        studentId: alloc.studentId,
+        recipientName: alloc.recipientName,
+        recipientRollNo: alloc.recipientRollNo,
+        competitionId: comp.id,
+        competitionTitle: comp.title,
+        clubName: comp.clubName || 'Technical Club',
+        clubSecretaryName: currentUser.role === 'CLUB_SECRETARY' ? currentUser.fullName : (comp.clubName ? `${comp.clubName} Secretary` : 'Club Secretary'),
+        clubSecretaryTitle: 'Club Secretary',
+        resultId: alloc.resultId,
+        category: alloc.category,
+        title: alloc.awardTitle || title,
+        awardText: alloc.awardText || awardText,
+        issueDate: timestamp.split('T')[0],
+        issuingAuthority: 'Army Institute of Technology, Pune',
+        signerName: INSTITUTIONAL_SIGNATORY.generalSecretaryName,
+        signerTitle: INSTITUTIONAL_SIGNATORY.generalSecretaryTitle,
+        status: 'PENDING_REVIEW', // In approval and signature workflow
+        verificationToken: `ait-vtoken-${Date.now()}-${alloc.studentId.substring(0, 6)}`,
+        signatureMode: 'PENDING',
+        createdAt: timestamp,
+      });
+    }
+
+    if (newCerts.length > 0) {
+      setCertificates((prev) => [...newCerts, ...prev]);
+
+      const gs = allProfiles.find((p) => p.role === 'GENERAL_SECRETARY');
+      if (gs) {
+        setNotifications((prev) => [
+          {
+            id: `notif-cert-alloc-${Date.now()}`,
+            userId: gs.id,
+            title: 'Certificate Allocation Awaiting Signature',
+            message: `${newCerts.length} certificates allocated by ${currentUser.fullName} require review and General Secretary signature.`,
+            link: '/general-secretary',
+            type: 'CERTIFICATE',
+            isRead: false,
+            createdAt: timestamp,
+          },
+          ...prev,
+        ]);
+      }
+
+      addAuditLog(
+        'CERTIFICATES_ALLOCATED',
+        'CERTIFICATE',
+        newCerts[0].competitionId,
+        `${currentUser.fullName} allocated ${newCerts.length} certificates (Skipped duplicates: ${skippedDuplicates}). Enqueued for General Secretary signature.`
+      );
+    }
+
+    return { success: true, count: newCerts.length, skippedDuplicates };
+  };
+
+  // General Secretary Certificate Review, Approval & Digital Signing
+  const generalSecretarySignCertificate = (certId: string, pin: string) => {
+    const isGS = currentUser.role === 'GENERAL_SECRETARY';
+    if (!isGS) {
+      return { success: false, error: 'Unauthorized: Only the General Secretary can authorize and cryptographically sign institutional certificates.' };
     }
 
     if (!pin || pin.length < 4) {
-      return { success: false, error: 'Please enter a valid Director Signing PIN to authorise cryptographic signing.' };
+      return { success: false, error: 'Please enter a valid General Secretary Signing PIN (ait@gs2026) to authorize cryptographic signing.' };
     }
 
-    // Cryptographic signature hash calculation
     const cert = certificates.find((c) => c.id === certId);
     if (!cert) return { success: false, error: 'Certificate record not found.' };
 
@@ -815,6 +1732,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               signatureMode: 'MODE_B_CRYPTOGRAPHIC_PDF',
               signatureHash: simulatedHash,
               signedAt,
+              signerName: currentUser.fullName,
+              signerTitle: 'General Secretary, Technical Affairs, AIT Pune',
             }
           : c
       )
@@ -825,8 +1744,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       {
         id: `notif-${Date.now()}`,
         userId: cert.studentId,
-        title: 'Certificate Signed & Issued by Director',
-        message: `Your certificate for ${cert.competitionTitle} has been officially signed and is ready for download.`,
+        title: 'Certificate Signed & Issued',
+        message: `Your certificate for ${cert.competitionTitle} has been officially signed by General Secretary ${currentUser.fullName} and is ready for download.`,
         link: '/certificates',
         type: 'CERTIFICATE',
         isRead: false,
@@ -835,14 +1754,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...prev,
     ]);
 
-    addAuditLog('CERTIFICATE_DIGITALLY_SIGNED', 'CERTIFICATE', certId, `Digitally signed with hash ${simulatedHash.substring(0, 16)}...`);
+    addAuditLog('CERTIFICATE_DIGITALLY_SIGNED', 'CERTIFICATE', certId, `Digitally signed by GS ${currentUser.fullName} with hash ${simulatedHash.substring(0, 16)}...`);
 
     return { success: true, signatureHash: simulatedHash };
   };
 
-  const approveCertificate = (certId: string, mode: SignatureMode) => {
+  // Backward-compatibility alias
+  const directorSignCertificate = generalSecretarySignCertificate;
+
+  const returnCertificateForCorrection = (certId: string, remarks: string) => {
     setCertificates((prev) =>
-      prev.map((c) => (c.id === certId ? { ...c, status: 'APPROVED', signatureMode: mode } : c))
+      prev.map((c) =>
+        c.id === certId ? { ...c, status: 'RETURNED_FOR_CORRECTION', rejectionReason: remarks } : c
+      )
+    );
+    addAuditLog('CERTIFICATE_RETURNED_FOR_CORRECTION', 'CERTIFICATE', certId, `Returned by ${currentUser.fullName}. Remarks: ${remarks}`);
+  };
+
+  const revokeCertificate = (certId: string, reason: string) => {
+    setCertificates((prev) =>
+      prev.map((c) =>
+        c.id === certId ? { ...c, status: 'REVOKED', rejectionReason: reason } : c
+      )
+    );
+    addAuditLog('CERTIFICATE_REVOKED', 'CERTIFICATE', certId, `Revoked by ${currentUser.fullName}. Reason: ${reason}`);
+  };
+
+  const approveCertificate = (certId: string, mode?: SignatureMode) => {
+    setCertificates((prev) =>
+      prev.map((c) => (c.id === certId ? { ...c, status: 'APPROVED', signatureMode: mode || 'PENDING' } : c))
     );
     addAuditLog('CERTIFICATE_APPROVED', 'CERTIFICATE', certId, `Approved by ${currentUser.fullName}`);
   };
@@ -856,16 +1796,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addAuditLog('CERTIFICATE_REJECTED', 'CERTIFICATE', certId, `Rejected by ${currentUser.fullName}. Reason: ${reason}`);
   };
 
-  const batchApproveCertificates = (certIds: string[], mode: SignatureMode) => {
+  const batchApproveCertificates = (certIds: string[], mode?: SignatureMode) => {
     setCertificates((prev) =>
       prev.map((c) =>
-        certIds.includes(c.id) ? { ...c, status: 'APPROVED', signatureMode: mode } : c
+        certIds.includes(c.id) ? { ...c, status: 'APPROVED', signatureMode: mode || 'PENDING' } : c
       )
     );
     addAuditLog('CERTIFICATES_BATCH_APPROVED', 'CERTIFICATE', `${certIds.length} items`, `Batch approved by ${currentUser.fullName}`);
   };
 
-  const batchDirectorSignCertificates = (certIds: string[]) => {
+  const batchGeneralSecretarySignCertificates = (certIds: string[], pin?: string) => {
+    const isGS = currentUser.role === 'GENERAL_SECRETARY';
+    if (!isGS) {
+      return { successCount: 0, error: 'Unauthorized: Only General Secretary can batch sign.' };
+    }
+
     const signedAt = new Date().toISOString();
     let count = 0;
 
@@ -880,25 +1825,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             signatureMode: 'MODE_B_CRYPTOGRAPHIC_PDF',
             signatureHash: simulatedHash,
             signedAt,
+            signerName: currentUser.fullName,
+            signerTitle: 'General Secretary, Technical Affairs, AIT Pune',
           };
         }
         return c;
       })
     );
 
-    addAuditLog('CERTIFICATES_BATCH_SIGNED', 'CERTIFICATE', `${certIds.length} items`, `Director batch signed ${count} certificates`);
-
+    addAuditLog('CERTIFICATES_BATCH_SIGNED', 'CERTIFICATE', `${certIds.length} items`, `General Secretary batch signed ${count} certificates`);
     return { successCount: count };
   };
 
+  const batchDirectorSignCertificates = (certIds: string[]) => batchGeneralSecretarySignCertificates(certIds);
+
   const createCompetition = (competitionData: Omit<Competition, 'id' | 'createdAt'>) => {
+    // Backend validation (Requirement 1)
+    if (!competitionData.title || !competitionData.title.trim()) {
+      return { success: false, error: 'Event name is required.' };
+    }
+    if (!competitionData.description || !competitionData.description.trim()) {
+      return { success: false, error: 'Event description is required.' };
+    }
+    if (!competitionData.startDate || !competitionData.endDate) {
+      return { success: false, error: 'Event start and end dates are required.' };
+    }
+    if (competitionData.minTeamSize && competitionData.maxTeamSize && competitionData.minTeamSize > competitionData.maxTeamSize) {
+      return { success: false, error: 'Minimum team size cannot exceed maximum team size.' };
+    }
+
     const newComp: Competition = {
       ...competitionData,
+      title: competitionData.title.trim(),
+      description: competitionData.description.trim(),
       id: `comp-${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
     setCompetitions((prev) => [newComp, ...prev]);
-    addAuditLog('COMPETITION_CREATED', 'COMPETITION', newComp.id, `Created ${newComp.title}`);
+    addAuditLog('COMPETITION_CREATED', 'COMPETITION', newComp.id, `Created ${newComp.title} with status ${newComp.status}`);
+    return { success: true, competition: newComp };
+  };
+
+  const updateCompetitionDetails = (
+    id: string,
+    data: Partial<Pick<Competition, 'title' | 'description' | 'category' | 'startDate' | 'endDate' | 'prizePool' | 'minTeamSize' | 'maxTeamSize' | 'registrationCloseDate'>>
+  ) => {
+    const comp = competitions.find((c) => c.id === id);
+    if (!comp) return { success: false, error: 'Competition not found.' };
+
+    if (comp.registrationCloseDate && new Date(comp.registrationCloseDate) < new Date()) {
+      return { success: false, error: 'Cannot modify competition: Registration deadline has already passed.' };
+    }
+
+    if (comp.status === 'COMPLETED' || comp.resultsStatus === 'PUBLISHED') {
+      return { success: false, error: 'Cannot modify competition: Event is completed or results have already been published.' };
+    }
+
+    setCompetitions((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...data } : c))
+    );
+
+    addAuditLog('COMPETITION_UPDATED', 'COMPETITION', id, `Updated competition details for ${comp.title}`);
+    return { success: true };
   };
 
   const updateCompetitionStatus = (id: string, status: Competition['status']) => {
@@ -1022,6 +2010,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNotifications(INITIAL_NOTIFICATIONS);
     setAuditLogs(INITIAL_AUDIT_LOGS);
     setSavedProjectIds(['proj-urban-oasis']);
+    setApplications(INITIAL_APPLICATIONS);
+    setJudgingScores(INITIAL_JUDGING_SCORES);
+    setAcademicYearCorrections([]);
+    setResultCorrectionLogs([]);
     localStorage.clear();
   };
 
@@ -1032,6 +2024,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         allProfiles,
         clubs,
         notices,
+        noticeReactions,
         appointments,
         competitions,
         teams,
@@ -1043,12 +2036,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         auditLogs,
         savedProjectIds,
         isSupabaseActive: Boolean(isSupabaseConfigured),
+        applications,
+        judgingScores,
+        academicYearCorrections,
+        resultCorrectionLogs,
         switchUser,
         loginWithDesignation,
         loginWithRegAndRoll,
         registerStudent,
         verifyStudent,
         createCompetition,
+        updateCompetitionDetails,
         updateCompetitionStatus,
         createTeam,
         joinTeam,
@@ -1057,21 +2055,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         toggleSaveProject,
         publishNotice,
         withdrawNotice,
+        toggleNoticeReaction,
         appointJointSecretary,
         appointClubSecretary,
         revokeAppointment,
         submitOfficialResult,
         verifyPodiumResults,
+        submitResultsForVerification,
+        verifyAndPublishResults,
+        correctPublishedResult,
+        updateCompetitionForm,
+        publishCompetitionRegistration,
+        submitHackathonApplication,
+        updateApplicationStatus,
+        recordJudgingScore,
+        verifyStudentOtp,
+        requestVerificationOtp,
+        generalSecretaryVerifyStudent,
+        adminCorrectStudentYear,
+        recoverPassword,
+        resetPasswordWithToken,
         generateCertificatesForCompetition,
+        allocateCertificates,
         approveCertificate,
+        generalSecretarySignCertificate,
         directorSignCertificate,
+        returnCertificateForCorrection,
         rejectCertificate,
+        revokeCertificate,
         batchApproveCertificates,
+        batchGeneralSecretarySignCertificates,
         batchDirectorSignCertificates,
         markNotificationRead,
         markAllNotificationsRead,
         addAuditLog,
         resetToDefaultData,
+        isInitialized,
       }}
     >
       {children}

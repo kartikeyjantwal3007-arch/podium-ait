@@ -47,17 +47,13 @@ export default function TopNavbar({ onToggleMobileMenu }: TopNavbarProps) {
 
   const getRoleLabel = (role: string) => {
     switch (role) {
-      case 'DIRECTOR':
-      case 'PRINCIPAL':
-        return 'Director';
       case 'GENERAL_SECRETARY':
-      case 'ADMINISTRATOR':
         return 'General Sec';
       case 'CLUB_SECRETARY':
-      case 'COMPETITION_ORGANISER':
         return 'Club Sec';
       case 'JOINT_SECRETARY':
         return 'Joint Sec';
+      case 'STUDENT':
       default:
         return 'Student';
     }

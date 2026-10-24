@@ -170,7 +170,12 @@ export default function ProjectsPage() {
 
           {/* Projects Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((p) => {
+            {filteredProjects.length === 0 ? (
+              <div className="col-span-3 text-center py-16 text-slate-400 text-sm">
+                No projects have been published yet.
+              </div>
+            ) : (
+              filteredProjects.map((p) => {
               const isSaved = savedProjectIds.includes(p.id);
 
               return (
@@ -254,7 +259,7 @@ export default function ProjectsPage() {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
 
         </main>

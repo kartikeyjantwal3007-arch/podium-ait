@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import DashboardShell from '@/components/DashboardShell';
 import { useAppStore } from '@/lib/store';
+import { NoticeReactionType } from '@/lib/types';
 import {
   ScrollText,
   Plus,
@@ -18,10 +19,20 @@ import {
   Trash2,
   Eye,
   Filter,
+  Shield,
 } from 'lucide-react';
 
+const EMOJI_REACTIONS: { type: NoticeReactionType; emoji: string; label: string }[] = [
+  { type: 'LIKE', emoji: '👍', label: 'Like' },
+  { type: 'LOVE', emoji: '❤️', label: 'Love' },
+  { type: 'LAUGH', emoji: '😂', label: 'Laugh' },
+  { type: 'WOW', emoji: '😮', label: 'Wow' },
+  { type: 'THANKS', emoji: '🙏', label: 'Thanks' },
+  { type: 'CELEBRATE', emoji: '👏', label: 'Celebrate' },
+];
+
 export default function NoticesPage() {
-  const { currentUser, notices, publishNotice, withdrawNotice } = useAppStore();
+  const { currentUser, notices, noticeReactions, toggleNoticeReaction, publishNotice, withdrawNotice } = useAppStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,13 +52,9 @@ export default function NoticesPage() {
     'JOINT_SECRETARY',
     'CLUB_SECRETARY',
     'GENERAL_SECRETARY',
-    'DIRECTOR',
-    'ADMINISTRATOR',
-    'PRINCIPAL',
-    'COMPETITION_ORGANISER',
   ].includes(currentUser.role);
 
-  const canPublishPriority = ['GENERAL_SECRETARY', 'DIRECTOR', 'ADMINISTRATOR', 'PRINCIPAL'].includes(currentUser.role);
+  const canPublishPriority = currentUser.role === 'GENERAL_SECRETARY';
 
   const handlePublishSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +123,7 @@ export default function NoticesPage() {
               </h1>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Official notifications broadcasted by Joint Secretaries, Club Secretaries, General Secretary, and the Directorate.
+              Official notifications broadcasted by Joint Secretaries, Club Secretaries, and the General Secretary.
             </p>
           </div>
 
@@ -186,7 +193,7 @@ export default function NoticesPage() {
                       )}
                     </div>
 
-                    {(notice.authorId === currentUser.id || currentUser.role === 'DIRECTOR') && (
+                    {(notice.authorId === currentUser.id || currentUser.role === 'GENERAL_SECRETARY') && (
                       <button
                         onClick={() => withdrawNotice(notice.id)}
                         className="text-slate-500 hover:text-rose-400 transition-colors flex items-center gap-1"
@@ -221,8 +228,8 @@ export default function NoticesPage() {
         {/* ── Standard Notices Grid ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {regularNotices.length === 0 ? (
-            <div className="col-span-2 text-center py-12 rounded-2xl bg-[#0c101d] border border-[#1a2236] text-slate-500 text-xs">
-              No active notices found in this category.
+            <div className="col-span-2 text-center py-12 rounded-2xl bg-[#0c101d] border border-[#1a2236] text-slate-400 text-sm">
+              No announcements available right now.
             </div>
           ) : (
             regularNotices.map((notice) => (
@@ -257,7 +264,7 @@ export default function NoticesPage() {
                     <span className="text-[10px] text-slate-500">({notice.authorDesignation.replace('_', ' ')})</span>
                   </div>
 
-                  {(notice.authorId === currentUser.id || currentUser.role === 'DIRECTOR') && (
+                  {(notice.authorId === currentUser.id || currentUser.role === 'GENERAL_SECRETARY') && (
                     <button
                       onClick={() => withdrawNotice(notice.id)}
                       className="text-slate-500 hover:text-rose-400 transition-colors flex items-center gap-1 text-[10px]"
@@ -266,6 +273,32 @@ export default function NoticesPage() {
                     </button>
                   )}
                 </div>
+                {/* WhatsApp-Style Emoji Reaction Controls */}
+                <div className="pt-2 border-t border-[#1e293b]/50 flex flex-wrap items-center gap-1.5">
+                  {EMOJI_REACTIONS.map((opt) => {
+                    const count = noticeReactions.filter((r) => r.noticeId === notice.id && r.reaction === opt.type).length;
+                    const isSelected = noticeReactions.some((r) => r.noticeId === notice.id && r.userId === currentUser.id && r.reaction === opt.type);
+
+                    return (
+                      <button
+                        key={opt.type}
+                        type="button"
+                        onClick={() => toggleNoticeReaction(notice.id, opt.type)}
+                        title={`${opt.label} (${count})`}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium border transition-all ${
+                          isSelected
+                            ? 'bg-indigo-600/30 text-white border-indigo-400 scale-105'
+                            : 'bg-[#0c101d] text-slate-300 border-[#1e293b] hover:border-slate-600 hover:bg-[#151b2e]'
+                        }`}
+                      >
+                        <span className="text-sm">{opt.emoji}</span>
+                        <span className={`text-[11px] ${isSelected ? 'font-bold text-indigo-300' : 'text-slate-400'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))
           )}
@@ -273,7 +306,7 @@ export default function NoticesPage() {
 
       </div>
 
-      {/* ── Notice Creation Modal (Joint Secretary, Club Secretary, General Secretary, Director) ── */}
+      {/* ── Notice Creation Modal (Joint Secretary, Club Secretary, General Secretary) ── */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl bg-[#0c101d] border border-[#1e293b] p-6 space-y-4 shadow-2xl">

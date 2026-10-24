@@ -10,7 +10,6 @@ import {
   Users,
   BarChart2,
   FolderGit2,
-  Globe2,
   User,
   ChevronRight,
   PenTool,
@@ -47,23 +46,19 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     }
   }, [ongoingComp]);
 
-  const pendingDirectorCerts = certificates.filter(
-    (c) => c.status === 'PENDING_SIGNATURE' || c.status === 'PENDING_REVIEW' || c.status === 'SUBMITTED' || c.status === 'UNDER_REVIEW'
+  const pendingGSCerts = certificates.filter(
+    (c) => c.status === 'PENDING_SIGNATURE' || c.status === 'PENDING_REVIEW' || c.status === 'APPROVED'
   ).length;
 
   const getRoleBadge = (role: string) => {
     switch (role) {
-      case 'DIRECTOR':
-      case 'PRINCIPAL':
-        return { label: 'Director', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
       case 'GENERAL_SECRETARY':
-      case 'ADMINISTRATOR':
         return { label: 'General Sec', color: 'text-rose-400 bg-rose-500/10 border-rose-500/30' };
       case 'CLUB_SECRETARY':
-      case 'COMPETITION_ORGANISER':
         return { label: 'Club Sec', color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30' };
       case 'JOINT_SECRETARY':
         return { label: 'Joint Sec', color: 'text-purple-400 bg-purple-500/10 border-purple-500/30' };
+      case 'STUDENT':
       default:
         return { label: 'Student', color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' };
     }
@@ -78,7 +73,6 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
     { name: 'Teams', href: '/teams', icon: Users },
     { name: 'Leaderboard', href: '/podium', icon: BarChart2 },
     { name: 'Projects', href: '/projects', icon: FolderGit2 },
-    { name: 'Community', href: '/community', icon: Globe2 },
     { name: 'My Profile', href: '/profile', icon: User },
   ];
 
@@ -134,8 +128,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
           </div>
         )}
 
-        {/* 2. Club Secretary Dedicated Navigation */}
-        {(currentUser.role === 'CLUB_SECRETARY' || currentUser.role === 'COMPETITION_ORGANISER') && (
+        {currentUser.role === 'CLUB_SECRETARY' && (
           <div className="pb-2 mb-2 border-b border-[#1a2236]/70">
             <p className="text-[9px] uppercase font-bold text-indigo-400 tracking-wider px-3 mb-1 flex items-center gap-1">
               <Briefcase className="w-3 h-3" />
@@ -157,7 +150,7 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
         )}
 
         {/* 3. General Secretary Dedicated Navigation */}
-        {(currentUser.role === 'GENERAL_SECRETARY' || currentUser.role === 'ADMINISTRATOR') && (
+        {currentUser.role === 'GENERAL_SECRETARY' && (
           <div className="pb-2 mb-2 border-b border-[#1a2236]/70">
             <p className="text-[9px] uppercase font-bold text-rose-400 tracking-wider px-3 mb-1 flex items-center gap-1">
               <Shield className="w-3 h-3" />
@@ -166,41 +159,19 @@ export default function Sidebar({ onCloseMobile }: SidebarProps) {
             <Link
               href="/general-secretary"
               onClick={onCloseMobile}
-              className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+              className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                 pathname === '/general-secretary' || pathname === '/admin'
                   ? 'bg-rose-600/20 text-rose-200 border border-rose-500/30'
                   : 'text-rose-300 hover:bg-rose-500/10'
               }`}
             >
-              <Shield className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>Supervisory Console</span>
-            </Link>
-          </div>
-        )}
-
-        {/* 4. Director Dedicated Navigation */}
-        {(currentUser.role === 'DIRECTOR' || currentUser.role === 'PRINCIPAL') && (
-          <div className="pb-2 mb-2 border-b border-[#1a2236]/70">
-            <p className="text-[9px] uppercase font-bold text-amber-400 tracking-wider px-3 mb-1 flex items-center gap-1">
-              <Award className="w-3 h-3" />
-              Directorate
-            </p>
-            <Link
-              href="/director"
-              onClick={onCloseMobile}
-              className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                pathname === '/director' || pathname === '/principal'
-                  ? 'bg-amber-600/20 text-amber-200 border border-amber-500/30'
-                  : 'text-amber-300 hover:bg-amber-500/10'
-              }`}
-            >
               <div className="flex items-center gap-2.5">
-                <PenTool className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>Director Portal</span>
+                <Shield className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>Supervisory Console</span>
               </div>
-              {pendingDirectorCerts > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500 text-slate-950">
-                  {pendingDirectorCerts}
+              {pendingGSCerts > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-rose-500 text-white">
+                  {pendingGSCerts}
                 </span>
               )}
             </Link>
