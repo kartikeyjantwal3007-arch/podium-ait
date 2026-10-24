@@ -33,8 +33,8 @@ export default function CertificatesPage() {
 
   const totalCount = studentCerts.length;
   const issuedCount = studentCerts.filter(c => c.status === 'ISSUED').length;
-  const pendingCount = studentCerts.filter(c => c.status === 'UNDER_REVIEW' || c.status === 'SUBMITTED' || c.status === 'APPROVED' || c.status === 'SIGNED').length;
-  const rejectedCount = studentCerts.filter(c => c.status === 'REJECTED').length;
+  const pendingCount = studentCerts.filter(c => c.status === 'PENDING_REVIEW' || c.status === 'PENDING_SIGNATURE' || c.status === 'APPROVED' || c.status === 'RETURNED_FOR_CORRECTION').length;
+  const rejectedCount = studentCerts.filter(c => c.status === 'REJECTED' || c.status === 'REVOKED').length;
 
   const handleExternalUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +62,7 @@ export default function CertificatesPage() {
                 My Official Certificates Hub
               </h1>
               <p className="text-xs sm:text-sm text-slate-400">
-                All certificates issued, under principal review, or verified with cryptographic non-guessable tokens.
+                All certificates issued, under General Secretary review, or verified with cryptographic non-guessable tokens.
               </p>
             </div>
 
@@ -107,8 +107,8 @@ export default function CertificatesPage() {
             <h2 className="text-base font-bold text-white">Issued & Pending Credentials</h2>
 
             {studentCerts.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-[#0D1220] border border-slate-800 text-slate-500 text-xs">
-                No certificate records found for this student. Participate in a competition or achieve a podium finish to earn official certificates.
+              <div className="p-12 text-center rounded-2xl bg-[#0D1220] border border-slate-800 text-slate-400 text-sm">
+                No certificates have been issued yet.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

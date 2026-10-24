@@ -8,11 +8,11 @@ import Link from 'next/link';
 
 interface CertificateModalProps {
   certificate: Certificate | null;
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
 }
 
-export default function CertificateModal({ certificate, isOpen, onClose }: CertificateModalProps) {
+export default function CertificateModal({ certificate, isOpen = true, onClose }: CertificateModalProps) {
   if (!isOpen || !certificate) return null;
 
   const handlePrint = () => {

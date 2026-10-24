@@ -54,8 +54,8 @@ export default function RegisterPage() {
       return;
     }
 
-    if (!collegeEmail.toLowerCase().includes('aitpune')) {
-      setErrorMsg('Registration requires an authorised @aitpune.edu.in institutional email address.');
+    if (!collegeEmail.toLowerCase().trim().endsWith('@aitpune.edu.in')) {
+      setErrorMsg('Registration is restricted to verified AIT Pune institutional emails (@aitpune.edu.in). Please use your official college-assigned email.');
       return;
     }
 
@@ -232,19 +232,25 @@ export default function RegisterPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Graduation Year
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-300">
+                          Expected Graduation Year
+                        </label>
+                        <span className="text-[10px] text-amber-400 font-semibold px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20">Provisional</span>
+                      </div>
                       <select
                         value={graduationYear}
                         onChange={(e) => setGraduationYear(Number(e.target.value))}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-[#121A2B] border border-slate-700 text-slate-100 text-xs focus:outline-none focus:border-purple-500"
                       >
-                        <option value={2025}>2025 (4th Year)</option>
-                        <option value={2026}>2026 (3rd Year)</option>
-                        <option value={2027}>2027 (2nd Year)</option>
-                        <option value={2028}>2028 (1st Year)</option>
+                        <option value={2028}>2028 (Estimated 1st Year)</option>
+                        <option value={2027}>2027 (Estimated 2nd Year)</option>
+                        <option value={2026}>2026 (Estimated 3rd Year)</option>
+                        <option value={2025}>2025 (Estimated Final Year)</option>
                       </select>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Academic year of study is verified via the official AIT central roster and remains read-only once confirmed.
+                      </p>
                     </div>
                   </div>
 

@@ -39,7 +39,7 @@ export default function HomePage() {
 
   const featuredComps = competitions.slice(0, 3);
   const featuredProjects = projects.slice(0, 3);
-  const podiumResults = results.slice(0, 3);
+  const podiumResults = results.filter(r => r.isVerified).slice(0, 3);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#080B14]">
@@ -260,81 +260,93 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {podiumResults.map((res) => {
-              const isGold = res.rankPosition === 1;
-              const isSilver = res.rankPosition === 2;
-              const isBronze = res.rankPosition === 3;
+          {podiumResults.length === 0 ? (
+            <div className="rounded-2xl p-10 bg-[#121A2B]/60 border border-slate-800 text-center space-y-2 max-w-xl mx-auto">
+              <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                <Medal className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-white">No winners have been announced yet.</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Official podium standings will be published here once results are verified and approved by the General Secretary.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {podiumResults.map((res) => {
+                const isGold = res.rankPosition === 1;
+                const isSilver = res.rankPosition === 2;
+                const isBronze = res.rankPosition === 3;
 
-              return (
-                <div
-                  key={res.id}
-                  className={`relative rounded-2xl p-6 bg-[#121A2B] border transition-all ${
-                    isGold 
-                      ? 'border-amber-500/50 shadow-lg shadow-amber-950/20' 
-                      : isSilver
-                      ? 'border-slate-400/50'
-                      : 'border-amber-700/50'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base ${
-                        isGold ? 'bg-amber-400 text-black shadow-md shadow-amber-400/30'
-                        : isSilver ? 'bg-slate-300 text-black'
-                        : 'bg-amber-700 text-white'
-                      }`}>
-                        {res.rankPosition}
-                      </div>
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
-                          {res.awardTitle}
-                        </span>
-                        <h4 className="font-bold text-base text-white">{res.teamName}</h4>
-                      </div>
-                    </div>
-
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Verified
-                    </span>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
-                    <p className="text-xs text-slate-300">
-                      <strong className="text-slate-400 font-normal">Project: </strong> 
-                      <span className="font-semibold text-purple-300">{res.projectTitle || 'Autonomous Innovation'}</span>
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      <strong className="text-slate-400 font-normal">Competition: </strong> 
-                      {res.competitionTitle}
-                    </p>
-                    
-                    <div className="pt-2">
-                      <p className="text-[11px] text-slate-500 font-medium">Team Members:</p>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {res.members.map((m) => (
-                          <span key={m.studentId} className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                            {m.name} ({m.aitRollNo})
+                return (
+                  <div
+                    key={res.id}
+                    className={`relative rounded-2xl p-6 bg-[#121A2B] border transition-all ${
+                      isGold 
+                        ? 'border-amber-500/50 shadow-lg shadow-amber-950/20' 
+                        : isSilver
+                        ? 'border-slate-400/50'
+                        : 'border-amber-700/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-base ${
+                          isGold ? 'bg-amber-400 text-black shadow-md shadow-amber-400/30'
+                          : isSilver ? 'bg-slate-300 text-black'
+                          : 'bg-amber-700 text-white'
+                        }`}>
+                          {res.rankPosition}
+                        </div>
+                        <div>
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400">
+                            {res.awardTitle}
                           </span>
-                        ))}
+                          <h4 className="font-bold text-base text-white">{res.teamName}</h4>
+                        </div>
+                      </div>
+
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Verified
+                      </span>
+                    </div>
+
+                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
+                      <p className="text-xs text-slate-300">
+                        <strong className="text-slate-400 font-normal">Project: </strong> 
+                        <span className="font-semibold text-purple-300">{res.projectTitle || 'Autonomous Innovation'}</span>
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        <strong className="text-slate-400 font-normal">Competition: </strong> 
+                        {res.competitionTitle}
+                      </p>
+                      
+                      <div className="pt-2">
+                        <p className="text-[11px] text-slate-500 font-medium">Team Members:</p>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {res.members.map((m) => (
+                            <span key={m.studentId} className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                              {m.name} ({m.aitRollNo})
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-slate-500">Verified by: {res.verifiedBy}</span>
-                    <Link
-                      href="/podium"
-                      className="text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1"
-                    >
-                      Inspect Result <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
+                    <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-500">Verified by: {res.verifiedBy}</span>
+                      <Link
+                        href="/podium"
+                        className="text-sky-400 hover:text-sky-300 font-semibold inline-flex items-center gap-1"
+                      >
+                        Inspect Result <ChevronRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
         </div>
       </section>
